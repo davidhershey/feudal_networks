@@ -8,6 +8,10 @@ use_tf100_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.
 def flatten(x):
     return tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:])])
 
+def categorical_sample(logits, d):
+    value = tf.squeeze(tf.multinomial(logits - tf.reduce_max(logits, [1], keep_dims=True), 1), [1])
+    return tf.one_hot(value, d)
+
 class FeudalBatchProcessor(object):
     """
     This class adapts the batch of PolicyOptimizer to a batch useable by
@@ -55,10 +59,13 @@ class FeudalPolicy(policy.Policy):
         """
         Builds the manager and worker models.
         """
-        self._build_placeholders()
-        self._build_perception()
-        self._build_manager()
-        self._build_worker()
+        with tf.variable_scope('FeUdal'):
+            self._build_placeholders()
+            self._build_perception()
+            self._build_manager()
+            self._build_worker()
+            self._build_loss()
+        self.var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'FeUdal')
 
     def _build_perception(self):
         conv1 = tf.layers.conv2d(inputs=self.obs,
@@ -79,36 +86,39 @@ class FeudalPolicy(policy.Policy):
 
     def _build_manager(self):
         with tf.variable_scope('manager'):
-            self.manager_s = tf.layers.dense(inputs=self.z,\
+            # Calculate manager internal state
+            self.s = tf.layers.dense(inputs=self.z,\
                                             units=256,\
                                             activation=tf.nn.relu)
 
-            x = tf.expand_dims(self.manager_s, [0])
-
-
+            # Calculate manager output g
+            x = tf.expand_dims(self.s, [0])
             g_hat =self._build_lstm(x,self.g_dim,'manager')
             self.g = tf.nn.l2_normalize(g_hat,dim=1)
 
 
     def _build_worker(self):
         with tf.variable_scope('worker'):
-            num_acts = np.prod(list(self.act_space))
+            num_acts = self.act_space
+
+            #Calculate U
             flat_logits =self._build_lstm(tf.expand_dims(self.z, [0]),\
                                     size=num_acts*self.k,\
                                     name='worker')
-            print flat_logits
             U = tf.reshape(flat_logits,[-1,num_acts,self.k])
 
+            # Calculate w
             cut_g = tf.expand_dims(tf.stop_gradient(self.g),[1])
             gstack = tf.concat([self.prev_g,cut_g],axis=1)
             gsum = tf.reduce_sum(gstack,axis=1)
             phi = tf.get_variable("phi", (self.g_dim,self.k))
             w = tf.matmul(gsum,phi)
             w = tf.expand_dims(w,[2])
-            logits = tf.matmul(U,w)
-            self.pi = tf.nn.softmax(logits)
-            print self.pi.get_shape()
 
+            #Calculate policy and sample
+            logits = tf.matmul(U,w)
+            self.pi = tf.squeeze(tf.nn.softmax(logits))
+            self.sample = categorical_sample(self.pi, num_acts)[0, :]
 
 
     def _build_lstm(self,x,size,name):
