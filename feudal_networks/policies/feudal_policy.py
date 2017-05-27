@@ -6,13 +6,8 @@ import tensorflow.contrib.rnn as rnn
 use_tf100_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('1.0.0')
 
 import feudal_networks.policies.policy as policy
+import feudal_networks.policies.policy_utils as policy_utils
 
-def flatten(x):
-    return tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:])])
-
-def categorical_sample(logits, d):
-    value = tf.squeeze(tf.multinomial(logits - tf.reduce_max(logits, [1], keep_dims=True), 1), [1])
-    return tf.one_hot(value, d)
 
 class FeudalBatchProcessor(object):
     """
@@ -53,10 +48,6 @@ class FeudalPolicy(policy.Policy):
         self.state_init= {}
         self._build_model()
 
-    def _build_placeholders(self):
-        self.obs = tf.placeholder(tf.float32, [None] + list(self.obs_space))
-        self.prev_g = tf.placeholder(tf.float32, (None,self.c-1,self.g_dim))
-
     def _build_model(self):
         """
         Builds the manager and worker models.
@@ -67,7 +58,12 @@ class FeudalPolicy(policy.Policy):
             self._build_manager()
             self._build_worker()
             self._build_loss()
-        self.var_list = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 'FeUdal')
+        self.var_list = tf.get_collection(
+            tf.GraphKeys.TRAINABLE_VARIABLES, 'FeUdal')
+
+    def _build_placeholders(self):
+        self.obs = tf.placeholder(tf.float32, [None] + list(self.obs_space))
+        self.prev_g = tf.placeholder(tf.float32, (None,self.c-1,self.g_dim))
 
     def _build_perception(self):
         conv1 = tf.layers.conv2d(inputs=self.obs,
@@ -81,7 +77,7 @@ class FeudalPolicy(policy.Policy):
                                 activation=tf.nn.relu,
                                 strides=2)
 
-        flattened_filters = flatten(conv2)
+        flattened_filters = policy_utils.flatten(conv2)
         self.z = tf.layers.dense(inputs=flattened_filters,\
                                 units=256,\
                                 activation=tf.nn.relu)
@@ -95,35 +91,34 @@ class FeudalPolicy(policy.Policy):
 
             # Calculate manager output g
             x = tf.expand_dims(self.s, [0])
-            g_hat =self._build_lstm(x,self.g_dim,'manager')
-            self.g = tf.nn.l2_normalize(g_hat,dim=1)
-
+            g_hat = self._build_lstm(x, self.g_dim, 'manager')
+            self.g = tf.nn.l2_normalize(g_hat, dim=1)
 
     def _build_worker(self):
         with tf.variable_scope('worker'):
             num_acts = self.act_space
 
-            #Calculate U
-            flat_logits =self._build_lstm(tf.expand_dims(self.z, [0]),\
-                                    size=num_acts*self.k,\
+            # Calculate U
+            flat_logits = self._build_lstm(tf.expand_dims(self.z, [0]),\
+                                    size=num_acts * self.k,\
                                     name='worker')
             U = tf.reshape(flat_logits,[-1,num_acts,self.k])
 
             # Calculate w
-            cut_g = tf.expand_dims(tf.stop_gradient(self.g),[1])
-            gstack = tf.concat([self.prev_g,cut_g],axis=1)
-            gsum = tf.reduce_sum(gstack,axis=1)
-            phi = tf.get_variable("phi", (self.g_dim,self.k))
+            cut_g = tf.expand_dims(tf.stop_gradient(self.g), [1])
+            gstack = tf.concat([self.prev_g,cut_g], axis=1)
+            gsum = tf.reduce_sum(gstack, axis=1)
+            phi = tf.get_variable("phi", (self.g_dim, self.k))
             w = tf.matmul(gsum,phi)
             w = tf.expand_dims(w,[2])
 
-            #Calculate policy and sample
+            # Calculate policy and sample
             logits = tf.matmul(U,w)
             self.pi = tf.squeeze(tf.nn.softmax(logits))
-            self.sample = categorical_sample(self.pi, num_acts)[0, :]
+            self.sample = policy_utils.categorical_sample(
+                self.pi, num_acts)[0, :]
 
-
-    def _build_lstm(self,x,size,name):
+    def _build_lstm(self, x, size, name):
         if use_tf100_api:
             lstm = rnn.BasicLSTMCell(size, state_is_tuple=True)
         else:
@@ -150,7 +145,6 @@ class FeudalPolicy(policy.Policy):
 
         lstm_c, lstm_h = lstm_state
         self.state_out[name] = [lstm_c[:1, :], lstm_h[:1, :]]
-        # print name, lstm_outputs.get_shape()
         return tf.reshape(lstm_outputs, [-1, size])
 
     def _build_loss(self):
