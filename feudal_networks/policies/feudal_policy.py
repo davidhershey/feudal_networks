@@ -1,9 +1,11 @@
-import policy
+
+import distutils.version
+import numpy as np
 import tensorflow as tf
 import tensorflow.contrib.rnn as rnn
-import numpy as np
-import distutils.version
 use_tf100_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('1.0.0')
+
+import feudal_networks.policies.policy as policy
 
 def flatten(x):
     return tf.reshape(x, [-1, np.prod(x.get_shape().as_list()[1:])])
