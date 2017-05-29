@@ -4,6 +4,7 @@ from feudal_networks.policies.feudal_policy import FeudalPolicy
 
 class config():
     alpha = .5
+    vf_hidden_size = 128
 
 class TestFeudalPolicy(unittest.TestCase):
 
