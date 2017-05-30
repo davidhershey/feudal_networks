@@ -241,8 +241,8 @@ class FeudalPolicyOptimizer(object):
         batch = process_rollout(rollout, gamma=.99)
         batch = self.policy.update_batch(batch)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
-        should_compute_summary = True
-        # should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
+        # should_compute_summary = True
+        should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
 
         if should_compute_summary:
             fetches = [self.policy.summary_op, self.train_op, self.global_step]
