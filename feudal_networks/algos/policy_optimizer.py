@@ -8,6 +8,8 @@ import scipy.signal
 import tensorflow as tf
 import threading
 
+import feudal_networks.polices.lstm_policy
+
 def discount(x, gamma):
     return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
@@ -154,34 +156,41 @@ def env_runner(env, policy, num_local_steps, summary_writer):
         yield rollout
 
 class PolicyOptimizer(object):
-    def __init__(self, env, global_policy,global_step, policy, config):
+    def __init__(self, env, task, policy):
         self.env = env
         self.task = task
-        self.global_policy = global_policy
-        self.global_step = global_step
-        self.policy = pi = policy
-        self.config = config
 
-        # build runner thread for collecting rollouts
-        self.runner = RunnerThread(env, self.policy, config.update_steps)
+        worker_device = "/job:worker/task:{}/cpu:0".format(task)
+        with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
+            with tf.variable_scope("global"):
+                self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
+                                                   trainable=False)
 
-        # formulate gradients
-        grads = tf.gradients(pi.loss, pi.var_list)
-        grads, _ = tf.clip_by_global_norm(grads, config.max_global_grad_norm)
+        with tf.device(worker_device):
+            with tf.variable_scope("local"):
+                self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                pi.global_step = self.global_step
 
-        # build sync
-        # copy weights from the parameter server to the local model
-        self.sync = tf.group(*[v1.assign(v2) 
-            for v1, v2 in zip(pi.var_list, self.global_policy.var_list)])
-        grads_and_vars = list(zip(grads, self.global_policy.var_list))
-        # TODO: avoid accessing pi.x here somehow
-        inc_step = self.global_step.assign_add(tf.shape(pi.x)[0])
+            # build runner thread for collecting rollouts
+            self.runner = RunnerThread(env, self.policy, 20)
 
-        # build train op
-        opt = tf.train.AdamOptimizer(config.lr)
-        self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
-        self.summary_writer = None
-        self.local_steps = 0
+            # formulate gradients
+            grads = tf.gradients(pi.loss, pi.var_list)
+            grads, _ = tf.clip_by_global_norm(grads, 40)
+
+            # build sync
+            # copy weights from the parameter server to the local model
+            self.sync = tf.group(*[v1.assign(v2) 
+                for v1, v2 in zip(pi.var_list, self.global_policy.var_list)])
+            grads_and_vars = list(zip(grads, self.global_policy.var_list))
+            inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
+
+            # build train op
+            opt = tf.train.AdamOptimizer(1e-4)
+            self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
+            self.summary_writer = None
+            self.local_steps = 0
 
     def start(self, sess, summary_writer):
         self.runner.start_runner(sess, summary_writer)
@@ -211,8 +220,7 @@ class PolicyOptimizer(object):
         # recent global weights
         sess.run(self.sync)  
         rollout = self.pull_batch_from_queue()
-        batch = process_rollout(rollout, gamma=self.config.gamma, 
-            lambda_=self.config.lambda_)
+        batch = process_rollout(rollout, gamma=.99)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
         self.policy.update(sess, self.train_op, batch, self.summary_writer,
             compute_summary)

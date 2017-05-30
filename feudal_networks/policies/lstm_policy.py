@@ -7,14 +7,16 @@ from feudal_networks.models.models import (linear, conv2d, build_lstm,
     normalized_columns_initializer)
 import feudal_networks.policies.policy_utils as policy_utils
 
+from configs.lstm_config import Config
+
 class LSTMPolicy(object):
-    def __init__(self, obs_space, act_space, config):
+    def __init__(self, obs_space, act_space):
         self.obs_space = obs_space
         self.act_space = act_space
-        self.config = config
+        self.config = config = Config
         self.local_steps = 0
         # build placeholders
-        self.x = x = tf.placeholder(tf.float32, 
+        self.obs = x = tf.placeholder(tf.float32, 
                                     [None] + list(obs_space), 
                                     name='state')
         self.adv = tf.placeholder(tf.float32, 
