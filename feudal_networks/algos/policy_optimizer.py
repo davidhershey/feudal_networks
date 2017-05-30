@@ -1,5 +1,5 @@
 """
-Much of the code in this file was originally developed as part of the 
+Much of the code in this file was originally developed as part of the
 universe starter agent: https://github.com/openai/universe-starter-agent
 """
 from collections import namedtuple
@@ -7,16 +7,18 @@ import numpy as np
 import scipy.signal
 import tensorflow as tf
 import threading
+import six.moves.queue as queue
 
-import feudal_networks.polices.lstm_policy
+from feudal_networks.policies.lstm_policy import LSTMPolicy
+from feudal_networks.policies.feudal_policy import FeudalPolicy
 
 def discount(x, gamma):
     return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
 def process_rollout(rollout, gamma, lambda_=1.0):
     """
-    given a rollout, compute its returns and the advantage
-    """
+given a rollout, compute its returns and the advantage
+"""
     batch_si = np.asarray(rollout.states)
     batch_a = np.asarray(rollout.actions)
     rewards = np.asarray(rollout.rewards)
@@ -32,7 +34,8 @@ def process_rollout(rollout, gamma, lambda_=1.0):
     features = rollout.features[0]
     return Batch(batch_si, batch_a, batch_adv, batch_r, rollout.terminal, features)
 
-Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
+# Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
+Batch = namedtuple("Batch", ["si", "a", "adv", "r", "terminal", "features"])
 
 class PartialRollout(object):
     """
@@ -102,7 +105,7 @@ class RunnerThread(threading.Thread):
 
             self.queue.put(next(rollout_provider), timeout=600.0)
 
-def env_runner(env, policy, num_local_steps, summary_writer):
+def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     """
     The logic of the thread runner.  In brief, it constantly keeps on running
     the policy, and as long as the rollout exceeds a certain length, the thread
@@ -156,24 +159,36 @@ def env_runner(env, policy, num_local_steps, summary_writer):
         yield rollout
 
 class PolicyOptimizer(object):
-    def __init__(self, env, task, policy):
+    def __init__(self, env, task, policy,visualise):
         self.env = env
         self.task = task
 
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
         with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
             with tf.variable_scope("global"):
-                self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n)
                 self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
                                                    trainable=False)
+                if policy == 'lstm':
+                    self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
+                elif policy == 'feudal':
+                    self.network = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
+                else:
+                    print "Policy type unknown"
+                    exit(0)
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n)
+                if policy == 'lstm':
+                    self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
+                elif policy == 'feudal':
+                    self.local_network = pi = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
+                else:
+                    print "Policy type unknown"
+                    exit(0)
                 pi.global_step = self.global_step
-
+            self.policy = pi
             # build runner thread for collecting rollouts
-            self.runner = RunnerThread(env, self.policy, 20)
+            self.runner = RunnerThread(env, self.policy, 20,visualise)
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)
@@ -181,9 +196,9 @@ class PolicyOptimizer(object):
 
             # build sync
             # copy weights from the parameter server to the local model
-            self.sync = tf.group(*[v1.assign(v2) 
-                for v1, v2 in zip(pi.var_list, self.global_policy.var_list)])
-            grads_and_vars = list(zip(grads, self.global_policy.var_list))
+            self.sync = tf.group(*[v1.assign(v2)
+                for v1, v2 in zip(pi.var_list, self.network.var_list)])
+            grads_and_vars = list(zip(grads, self.network.var_list))
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
 
             # build train op
@@ -210,18 +225,48 @@ class PolicyOptimizer(object):
 
     def train(self, sess):
         """
-        This first runs the sync op so that the gradients are computed wrt the 
+        This first runs the sync op so that the gradients are computed wrt the
         current global weights. It then takes a rollout from the runner's queue,
         converts it to a batch, and passes that batch and the train op to the
-        policy to perform an update. 
+        policy to perform an update.
         """
-        # copy weights from shared to local 
-        # this should be run first so that the updates are for the most 
+        # copy weights from shared to local
+        # this should be run first so that the updates are for the most
         # recent global weights
-        sess.run(self.sync)  
+        sess.run(self.sync)
         rollout = self.pull_batch_from_queue()
         batch = process_rollout(rollout, gamma=.99)
+        batch = self.policy.update_batch(batch)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
-        self.policy.update(sess, self.train_op, batch, self.summary_writer,
-            compute_summary)
+        should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
+
+        if should_compute_summary:
+            fetches = [self.policy.summary_op, self.train_op, self.global_step]
+        else:
+            fetches = [self.train_op, self.global_step]
+
+        feed_dict = {
+            self.policy.obs: batch.si,
+            self.network.obs: batch.si,
+
+            self.policy.ac: batch.a,
+            self.network.ac: batch.a,
+
+            self.policy.adv: batch.adv,
+            self.network.adv: batch.adv,
+
+            self.policy.r: batch.r,
+            self.network.r: batch.r,
+        }
+
+        for i in range(len(self.policy.state_in)):
+            feed_dict[self.policy.state_in[i]] = batch.features[i]
+            feed_dict[self.network.state_in[i]] = batch.features[i]
+
+
+        fetched = sess.run(fetches, feed_dict=feed_dict)
+
+        if should_compute_summary:
+            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]), fetched[-1])
+            self.summary_writer.flush()
         self.local_steps += 1

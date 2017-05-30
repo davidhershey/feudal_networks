@@ -7,7 +7,7 @@ import tensorflow.contrib.rnn as rnn
 import feudal_networks.policies.policy as policy
 import feudal_networks.policies.policy_utils as policy_utils
 from feudal_networks.models.models import SingleStepLSTM
-
+from feudal_networks.policies.configs.feudal_config import config
 
 class FeudalBatchProcessor(object):
     """
@@ -36,16 +36,14 @@ class FeudalPolicy(policy.Policy):
     Policy of the Feudal network architecture.
     """
 
-    def __init__(self, obs_space, act_space, config):
+    def __init__(self, obs_space, act_space,global_step):
+        self.global_step = global_step
         self.obs_space = obs_space
         self.act_space = act_space
         self.config = config
-        self.k = 16 #Dimensionality of w
-        self.g_dim = 256
-        self.c = 10
-        self.state_in = {}
-        self.state_out = {}
-        self.state_init= {}
+        self.k = config.k #Dimensionality of w
+        self.g_dim = config.g_dim
+        self.c = config.c
         self._build_model()
 
     def _build_model(self):
@@ -173,6 +171,9 @@ class FeudalPolicy(policy.Policy):
 
     def value(self, obs, prev_internal):
         pass
+    
+    def update_batch(batch):
+        return batch
 
     def update(self, sess, train_op, batch):
         """
