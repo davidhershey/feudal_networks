@@ -49,8 +49,12 @@ def build_lstm(x, size, name, step_size):
     h_init = np.zeros((1, lstm.state_size.h), np.float32)
     state_init = [c_init, h_init]
 
-    c_in = tf.placeholder(tf.float32, [1, lstm.state_size.c])
-    h_in = tf.placeholder(tf.float32, [1, lstm.state_size.h])
+    c_in = tf.placeholder(tf.float32, 
+            shape=[1, lstm.state_size.c],
+            name='c_in')
+    h_in = tf.placeholder(tf.float32, 
+            shape=[1, lstm.state_size.h],
+            name='h_in')
     state_in = [c_in, h_in]
 
     state_in = rnn.LSTMStateTuple(c_in, h_in)
@@ -73,8 +77,12 @@ class SingleStepLSTM(object):
         h_init = np.zeros((1, lstm.state_size.h), np.float32)
         self.state_init = [c_init, h_init]
 
-        c_in = tf.placeholder(tf.float32, [1, lstm.state_size.c])
-        h_in = tf.placeholder(tf.float32, [1, lstm.state_size.h])
+        c_in = tf.placeholder(tf.float32, 
+                shape=[1, lstm.state_size.c],
+                name='c_in')
+        h_in = tf.placeholder(tf.float32, 
+                shape=[1, lstm.state_size.h],
+                name='h_in')
         self.state_in = [c_in, h_in]
 
         state_in = rnn.LSTMStateTuple(c_in, h_in)

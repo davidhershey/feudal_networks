@@ -30,7 +30,7 @@ class LSTMPolicy(object):
                                     [None],
                                     name="r")
 
-        print self.r
+        print(self.r)
         # build perception
         for i in range(config.n_percept_hidden_layer):
             x = tf.nn.elu(conv2d(x, config.n_percept_filters,
