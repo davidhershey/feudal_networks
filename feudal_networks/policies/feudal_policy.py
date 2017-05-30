@@ -100,6 +100,7 @@ class FeudalPolicy(policy.Policy):
             self.g = tf.nn.l2_normalize(g_hat, dim=1)
 
             self.manager_vf = self._build_value(g_hat)
+            # self.manager_vf = tf.Print(self.manager_vf,[self.manager_vf])
 
     def _build_worker(self):
         with tf.variable_scope('worker'):
@@ -143,13 +144,13 @@ class FeudalPolicy(policy.Policy):
     def _build_loss(self):
         cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
         dot = tf.reduce_sum(tf.multiply(self.s_diff,self.g ),axis=1)
-        mag = tf.norm(self.s_diff,axis=1)*tf.norm(self.g,axis=1)
+        mag = tf.norm(self.s_diff,axis=1)*tf.norm(self.g,axis=1)+.0001
         dcos = dot/mag
         manager_loss = -tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
 
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf),[-1])
         log_pi = tf.log(self.pi)
-        log_p = tf.reduce_sum(log_pi*self.ac,1)
+        log_p = tf.reduce_sum(log_pi*self.ac,[1])
         worker_loss = (self.r + self.config.alpha*self.ri - cutoff_vf_worker)*log_p
         worker_loss = -tf.reduce_sum(worker_loss,axis=0)
 

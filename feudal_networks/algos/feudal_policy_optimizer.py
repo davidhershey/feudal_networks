@@ -117,6 +117,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     """
     last_state = env.reset()
     last_c_g,last_features = policy.get_initial_features()
+    # print last_c_g
     length = 0
     rewards = 0
 
@@ -131,6 +132,11 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                                                     fetched[2], fetched[3], \
                                                     fetched[4], fetched[5:]
             action_to_take = action.argmax()
+            # print action_to_take
+            # print action
+            # print g
+            # print s
+            # # exit(0)
             state, reward, terminal, info = env.step(action_to_take)
 
             # collect the experience
@@ -235,7 +241,8 @@ class FeudalPolicyOptimizer(object):
         batch = process_rollout(rollout, gamma=.99)
         batch = self.policy.update_batch(batch)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
-        should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
+        should_compute_summary = True
+        # should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
 
         if should_compute_summary:
             fetches = [self.policy.summary_op, self.train_op, self.global_step]
