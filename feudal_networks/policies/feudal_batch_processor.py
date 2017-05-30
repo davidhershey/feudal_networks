@@ -1,8 +1,11 @@
 
 import numpy as np
+from collections import namedtuple
 
 def cosine_similarity(u, v):
-    return np.dot(np.transpose(u),v) / (np.linalg.norm(u) * np.linalg.norm(v))
+    return np.dot(np.squeeze(u),np.squeeze(v)) / (np.linalg.norm(u) * np.linalg.norm(v))
+
+Batch = namedtuple("Batch", ["obs", "a", "returns", "s_diff", "ri", "gsum", "features"])
 
 class FeudalBatch(object):
     def __init__(self):
@@ -12,7 +15,7 @@ class FeudalBatch(object):
         self.s_diff = []
         self.ri = []
         self.gsum = []
-        self.features = []
+        self.features = None
 
     def add(self, obs, a, returns, s_diff, ri, gsum, features):
         self.obs += [obs]
@@ -21,7 +24,19 @@ class FeudalBatch(object):
         self.s_diff += [s_diff]
         self.ri += [ri]
         self.gsum += [gsum]
-        self.features += [features]
+        if not self.features:
+            self.features = features
+
+    def get_batch(self):
+        batch_obs = np.asarray(self.obs)
+        batch_a = np.asarray(self.a)
+        batch_r = np.asarray(self.returns)
+        batch_sd = np.squeeze(np.asarray(self.s_diff))
+        batch_ri = np.asarray(self.ri)
+        batch_gs = np.asarray(self.gsum)
+        return Batch(batch_obs,batch_a,batch_r,batch_sd,batch_ri,batch_gs,self.features)
+
+
 
 class FeudalBatchProcessor(object):
     """
@@ -33,8 +48,6 @@ class FeudalBatchProcessor(object):
         self.last_terminal = True
 
     def _extend(self, batch):
-        # if the last batch was a terminal one, then preprend with the first 
-        # s and g repeated c times
         if self.last_terminal:
             self.last_terminal = False
             self.s = [batch.s[0] for _ in range(self.c)]
@@ -74,11 +87,11 @@ class FeudalBatchProcessor(object):
         # extend with current batch
         self._extend(batch)
 
-        # unpack and compute bounds 
+        # unpack and compute bounds
         length = len(self.obs)
         c = self.c
 
-        # normally we cannot compute samples for the last c elements, but 
+        # normally we cannot compute samples for the last c elements, but
         # in the terminal case, we halluciante values where necessary
         end = length if batch.terminal else length - c
 
@@ -86,7 +99,7 @@ class FeudalBatchProcessor(object):
         feudal_batch = FeudalBatch()
         for t in range(c, end):
 
-            # state difference 
+            # state difference
             s_diff = self.s[t + c] - self.s[t]
 
             # intrinsic reward
@@ -112,8 +125,8 @@ class FeudalBatchProcessor(object):
         if batch.terminal:
             self.last_terminal = True
         # in the general case, forget all but the last 2 * c elements
-        # reason being that the first c of those we have already computed 
-        # a batch for, and the second c need those first c 
+        # reason being that the first c of those we have already computed
+        # a batch for, and the second c need those first c
         else:
             twoc = 2 * self.c
             self.obs = self.obs[-twoc:]
@@ -122,5 +135,5 @@ class FeudalBatchProcessor(object):
             self.s = self.s[-twoc:]
             self.g = self.g[-twoc:]
             self.features = self.features[-twoc:]
-       
-        return feudal_batch
+
+        return feudal_batch.get_batch()

@@ -21,22 +21,19 @@ given a rollout, compute its returns and the advantage
 """
     batch_si = np.asarray(rollout.states)
     batch_a = np.asarray(rollout.actions)
+
     rewards = np.asarray(rollout.rewards)
     vpred_t = np.asarray(rollout.values + [rollout.r])
-
     rewards_plus_v = np.asarray(rollout.rewards + [rollout.r])
     batch_r = discount(rewards_plus_v, gamma)[:-1]
-    delta_t = rewards + gamma * vpred_t[1:] - vpred_t[:-1]
-    # this formula for the advantage comes "Generalized Advantage Estimation":
-    # https://arxiv.org/abs/1506.02438
-    batch_adv = discount(delta_t, gamma * lambda_)
 
-    features = rollout.features[0]
-    print features
-    return Batch(batch_si, batch_a, batch_adv, batch_r, rollout.terminal, features)
+    batch_s = np.asarray(rollout.ss)
+    batch_g = np.asarray(rollout.gs)
+    features = rollout.features
+    return Batch(batch_si, batch_a, batch_r, rollout.terminal,batch_s,batch_g, features)
 
-# Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
-Batch = namedtuple("Batch", ["si", "a", "adv", "r", "terminal", "features"])
+Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
+# Batch = namedtuple("Batch", ["si", "a", "adv", "r", "terminal", "features"])
 
 class PartialRollout(object):
     """
@@ -48,17 +45,21 @@ class PartialRollout(object):
         self.actions = []
         self.rewards = []
         self.values = []
+        self.ss = []
+        self.gs = []
+        self.features = []
         self.r = 0.0
         self.terminal = False
-        self.features = []
 
-    def add(self, state, action, reward, value, terminal, features):
+    def add(self, state, action, reward, value,g,s, terminal, features):
         self.states += [state]
         self.actions += [action]
         self.rewards += [reward]
         self.values += [value]
         self.terminal = terminal
         self.features += [features]
+        self.gs += [g]
+        self.ss += [s]
 
     def extend(self, other):
         assert not self.terminal
@@ -66,6 +67,8 @@ class PartialRollout(object):
         self.actions.extend(other.actions)
         self.rewards.extend(other.rewards)
         self.values.extend(other.values)
+        self.gs.extend(other.gs)
+        self.ss.extend(other.ss)
         self.r = other.r
         self.terminal = other.terminal
         self.features.extend(other.features)
@@ -113,7 +116,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     runner appends the policy to the queue.
     """
     last_state = env.reset()
-    last_features = policy.get_initial_features()
+    last_c_g,last_features = policy.get_initial_features()
     length = 0
     rewards = 0
 
@@ -122,13 +125,16 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
         rollout = PartialRollout()
 
         for _ in range(num_local_steps):
-            fetched = policy.act(last_state, *last_features)
-            action, value_, features = fetched[0], fetched[1], fetched[2:]
+            # print last_c_g.shape
+            fetched = policy.act(last_state,last_c_g, *last_features)
+            action, value_, g,s,last_c_g,features = fetched[0], fetched[1], \
+                                                    fetched[2], fetched[3], \
+                                                    fetched[4], fetched[5:]
             action_to_take = action.argmax()
             state, reward, terminal, info = env.step(action_to_take)
 
             # collect the experience
-            rollout.add(last_state, action, reward, value_, terminal, last_features)
+            rollout.add(last_state, action, reward, value_, g, s, terminal, last_features)
             length += 1
             rewards += reward
 
@@ -147,19 +153,19 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 terminal_end = True
                 if length >= timestep_limit or not env.metadata.get('semantics.autoreset'):
                     last_state = env.reset()
-                last_features = policy.get_initial_features()
+                last_c_g,last_features = policy.get_initial_features()
                 print("Episode finished. Sum of rewards: %f. Length: %d" % (rewards, length))
                 length = 0
                 rewards = 0
                 break
 
         if not terminal_end:
-            rollout.r = policy.value(last_state, *last_features)
+            rollout.r = policy.value(last_state, last_c_g, *last_features)
 
         # once we have enough experience, yield it, and have the ThreadRunner place it on a queue
         yield rollout
 
-class PolicyOptimizer(object):
+class FeudalPolicyOptimizer(object):
     def __init__(self, env, task, policy,visualise):
         self.env = env
         self.task = task
@@ -169,23 +175,11 @@ class PolicyOptimizer(object):
             with tf.variable_scope("global"):
                 self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
                                                    trainable=False)
-                if policy == 'lstm':
-                    self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                elif policy == 'feudal':
-                    self.network = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                else:
-                    print "Policy type unknown"
-                    exit(0)
+                self.network = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                if policy == 'lstm':
-                    self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                elif policy == 'feudal':
-                    self.local_network = pi = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                else:
-                    print "Policy type unknown"
-                    exit(0)
+                self.local_network = pi = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts
@@ -249,17 +243,23 @@ class PolicyOptimizer(object):
             fetches = [self.train_op, self.global_step]
 
         feed_dict = {
-            self.policy.obs: batch.si,
-            self.network.obs: batch.si,
+            self.policy.obs: batch.obs,
+            self.network.obs: batch.obs,
 
             self.policy.ac: batch.a,
             self.network.ac: batch.a,
 
-            self.policy.adv: batch.adv,
-            self.network.adv: batch.adv,
+            self.policy.r: batch.returns,
+            self.network.r: batch.returns,
 
-            self.policy.r: batch.r,
-            self.network.r: batch.r,
+            self.policy.s_diff: batch.s_diff,
+            self.network.s_diff: batch.s_diff,
+
+            self.policy.prev_g: batch.gsum,
+            self.network.prev_g: batch.gsum,
+
+            self.policy.ri: batch.ri,
+            self.network.ri: batch.ri
         }
 
         for i in range(len(self.policy.state_in)):

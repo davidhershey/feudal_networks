@@ -9,6 +9,7 @@ import time
 import os
 from envs import create_env
 from feudal_networks.algos.policy_optimizer import PolicyOptimizer
+from feudal_networks.algos.feudal_policy_optimizer import FeudalPolicyOptimizer
 import distutils.version
 use_tf12_api = distutils.version.LooseVersion(tf.VERSION) >= distutils.version.LooseVersion('0.12.0')
 
@@ -24,7 +25,14 @@ class FastSaver(tf.train.Saver):
 
 def run(args, server):
     env = create_env(args.env_id, client_id=str(args.task), remotes=args.remotes)
-    trainer = PolicyOptimizer(env, args.task, args.policy,args.visualise)
+    if args.policy == 'lstm':
+        trainer = PolicyOptimizer(env, args.task, args.policy,args.visualise)
+    elif args.policy == 'feudal':
+        trainer = FeudalPolicyOptimizer(env, args.task, args.policy,args.visualise)
+    else:
+        print 'Invalid policy type'
+        exit(0)
+
 
     # Variable names that start with "local" are not saved in checkpoints.
     if use_tf12_api:

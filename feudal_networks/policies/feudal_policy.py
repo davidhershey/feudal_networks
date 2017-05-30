@@ -8,28 +8,7 @@ import feudal_networks.policies.policy as policy
 import feudal_networks.policies.policy_utils as policy_utils
 from feudal_networks.models.models import SingleStepLSTM
 from feudal_networks.policies.configs.feudal_config import config
-
-class FeudalBatchProcessor(object):
-    """
-    This class adapts the batch of PolicyOptimizer to a batch useable by
-    the FeudalPolicy.
-    """
-    def __init__(self):
-        pass
-
-    def process_batch(self, batch):
-        """
-        Converts a normal batch into one used by the FeudalPolicy update.
-
-        FeudalPolicy requires a batch of the form:
-
-        c previous timesteps - batch size timesteps - c future timesteps
-
-        This class handles the tracking the leading and following timesteps over
-        time. Additionally, it also computes values across timesteps from the
-        batch to provide to FeudalPolicy.
-        """
-        pass
+from feudal_networks.policies.feudal_batch_processor import FeudalBatchProcessor
 
 class FeudalPolicy(policy.Policy):
     """
@@ -44,6 +23,7 @@ class FeudalPolicy(policy.Policy):
         self.k = config.k #Dimensionality of w
         self.g_dim = config.g_dim
         self.c = config.c
+        self.batch_processor = FeudalBatchProcessor(self.c)
         self._build_model()
 
     def _build_model(self):
@@ -56,19 +36,36 @@ class FeudalPolicy(policy.Policy):
             self._build_manager()
             self._build_worker()
             self._build_loss()
-        self.var_list = tf.get_collection(
-            tf.GraphKeys.TRAINABLE_VARIABLES, 'FeUdal')
+            self.var_list = tf.get_collection(
+                tf.GraphKeys.TRAINABLE_VARIABLES, tf.get_variable_scope().name)
+        # for v in self.var_list:
+        #     print v.name
 
+        self.state_in = [self.worker_lstm.state_in[0],\
+                        self.worker_lstm.state_in[1],\
+                        self.manager_lstm.state_in[0],\
+                        self.manager_lstm.state_in[1]\
+                        ]
+        self.state_out = [self.worker_lstm.state_out[0],\
+                          self.worker_lstm.state_out[1],\
+                          self.manager_lstm.state_out[0],\
+                          self.manager_lstm.state_out[1]\
+                          ]
         # for v in self.var_list:
         #     print v
 
     def _build_placeholders(self):
+        #standard for all policies
         self.obs = tf.placeholder(tf.float32, [None] + list(self.obs_space))
-        self.prev_g = tf.placeholder(tf.float32, (None,self.c-1,self.g_dim))
-        self.R = tf.placeholder(tf.float32,(None,))
-        self.Ri = tf.placeholder(tf.float32,(None,))
-        self.s_diff = tf.placeholder(tf.float32,(None,self.g_dim))
+        self.r = tf.placeholder(tf.float32,(None,))
         self.ac = tf.placeholder(tf.float32,(None,self.act_space))
+        self.adv = tf.placeholder(tf.float32, [None]) #unused
+
+        #specific to FeUdal
+        self.prev_g = tf.placeholder(tf.float32, (None,None,self.g_dim))
+        self.ri = tf.placeholder(tf.float32,(None,))
+        self.s_diff = tf.placeholder(tf.float32,(None,self.g_dim))
+
 
     def _build_perception(self):
         conv1 = tf.layers.conv2d(inputs=self.obs,
@@ -85,14 +82,14 @@ class FeudalPolicy(policy.Policy):
         flattened_filters = policy_utils.flatten(conv2)
         self.z = tf.layers.dense(inputs=flattened_filters,\
                                 units=256,\
-                                activation=tf.nn.relu)
+                                activation=tf.nn.elu)
 
     def _build_manager(self):
         with tf.variable_scope('manager'):
             # Calculate manager internal state
             self.s = tf.layers.dense(inputs=self.z,\
                                             units=self.g_dim,\
-                                            activation=tf.nn.relu)
+                                            activation=tf.nn.elu)
 
             # Calculate manager output g
             x = tf.expand_dims(self.s, [0])
@@ -121,6 +118,9 @@ class FeudalPolicy(policy.Policy):
             # Calculate w
             cut_g = tf.expand_dims(tf.stop_gradient(self.g), [1])
             gstack = tf.concat([self.prev_g,cut_g], axis=1)
+
+            self.last_c_g = gstack[:,1:]
+            # print self.last_c_g
             gsum = tf.reduce_sum(gstack, axis=1)
             phi = tf.get_variable("phi", (self.g_dim, self.k))
             w = tf.matmul(gsum,phi)
@@ -135,7 +135,7 @@ class FeudalPolicy(policy.Policy):
         with tf.variable_scope('VF'):
             hidden = tf.layers.dense(inputs=input,\
                                 units=self.config.vf_hidden_size,\
-                                activation=tf.nn.relu)
+                                activation=tf.nn.elu)
 
             w = tf.get_variable("weights", (self.config.vf_hidden_size, 1))
             return tf.matmul(hidden,w)
@@ -145,40 +145,63 @@ class FeudalPolicy(policy.Policy):
         dot = tf.reduce_sum(tf.multiply(self.s_diff,self.g ),axis=1)
         mag = tf.norm(self.s_diff,axis=1)*tf.norm(self.g,axis=1)
         dcos = dot/mag
-        manager_loss = -tf.reduce_sum((self.R-cutoff_vf_manager)*dcos)
+        manager_loss = -tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
 
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf),[-1])
-        log_p = tf.reduce_sum(tf.log(self.pi)*self.ac,1)
-        worker_loss = (self.R + self.config.alpha*self.Ri - cutoff_vf_worker)*log_p
+        log_pi = tf.log(self.pi)
+        log_p = tf.reduce_sum(log_pi*self.ac,1)
+        worker_loss = (self.r + self.config.alpha*self.ri - cutoff_vf_worker)*log_p
         worker_loss = -tf.reduce_sum(worker_loss,axis=0)
 
-        Am = self.R-self.manager_vf
+        Am = self.r-self.manager_vf
         manager_vf_loss = .5*tf.reduce_sum(tf.square(Am))
 
-        Aw = (self.R + self.config.alpha*self.Ri)-self.worker_vf
+        Aw = (self.r + self.config.alpha*self.ri)-self.worker_vf
         worker_vf_loss = .5*tf.reduce_sum(tf.square(Aw))
 
-        entropy = - tf.reduce_sum(self.pi * log_p)
+        entropy = - tf.reduce_sum(self.pi * log_pi)
 
+        beta = tf.train.polynomial_decay(config.beta_start, self.global_step,
+                end_learning_rate=config.beta_end,
+                decay_steps=config.decay_steps,
+                power=1)
         self.loss = worker_loss+manager_loss+\
                     worker_vf_loss + manager_vf_loss-\
-                    entropy*.01
+                    entropy*beta
 
-        print self.loss
+        bs = tf.to_float(tf.shape(self.obs)[0])
+        tf.summary.scalar("model/manager_loss", manager_loss / bs)
+        tf.summary.scalar("model/worker_loss", worker_loss / bs)
+        tf.summary.scalar("model/value_mean", tf.reduce_mean(self.manager_vf))
+        tf.summary.scalar("model/value_loss", manager_vf_loss / bs)
+        tf.summary.scalar("model/value_loss_scaled", manager_vf_loss / bs * .5)
+        tf.summary.scalar("model/entropy", entropy / bs)
+        tf.summary.scalar("model/entropy_loss_scaleed", -entropy / bs * beta)
+        # tf.summary.scalar("model/grad_global_norm", tf.global_norm(grads))
+        tf.summary.scalar("model/var_global_norm", tf.global_norm(tf.get_collection(\
+            tf.GraphKeys.TRAINABLE_VARIABLES, tf.get_variable_scope().name)))
+        tf.summary.scalar("model/beta", beta)
+        tf.summary.image("model/state", self.obs)
+        self.summary_op = tf.summary.merge_all()
 
-    def act(self, obs, prev_internal):
-        pass
 
-    def value(self, obs, prev_internal):
-        pass
-    
-    def update_batch(batch):
-        return batch
+    def get_initial_features(self):
+        return np.zeros((1,1,self.g_dim),np.float32),self.worker_lstm.state_init+self.manager_lstm.state_init
 
-    def update(self, sess, train_op, batch):
-        """
-        This function performs a weight update. It does this by first converting
-        the batch into a feudal_batch using a FeudalBatchProcessor. The
-        feudal_batch can then be passed into a session run call directly.
-        """
-        pass
+
+    def act(self, ob, g,cw,hw,cm,hm):
+        sess = tf.get_default_session()
+        return sess.run([self.sample, self.manager_vf, self.g, self.s, self.last_c_g] + self.state_out,
+                        {self.obs: [ob], self.state_in[0]: cw, self.state_in[1]: hw,\
+                         self.state_in[2]: cm, self.state_in[3]: hm,\
+                         self.prev_g: g})
+
+    def value(self, ob, g, cw, hw, cm, hm):
+        sess = tf.get_default_session()
+        return sess.run(self.manager_vf,
+                        {self.obs: [ob], self.state_in[0]: cw, self.state_in[1]: hw,\
+                         self.state_in[2]: cm, self.state_in[3]: hm,\
+                         self.prev_g: g})[0]
+
+    def update_batch(self,batch):
+        return self.batch_processor.process_batch(batch)
