@@ -98,27 +98,3 @@ class LSTMPolicy(object):
 
     def update_batch(self,batch):
         return batch
-
-    def update(self, sess, train_op, batch, summary_writer):
-        self.local_steps += 1
-        compute_summary = self.local_steps % self.config.summary_steps == 0
-        if compute_summary:
-            fetches = [self.summary_op, train_op, self.global_step]
-        else:
-            fetches = [train_op, self.global_step]
-
-        feed_dict = {
-            self.obs: batch.si,
-            self.ac: batch.a,
-            self.adv: batch.adv,
-            self.r: batch.r,
-            self.state_in[0]: batch.features[0],
-            self.state_in[1]: batch.features[1],
-        }
-
-        fetched = sess.run(fetches, feed_dict=feed_dict)
-
-        if compute_summary:
-            summary_writer.add_summary(
-                tf.Summary.FromString(fetched[0]), fetched[-1])
-            summary_writer.flush()
