@@ -6,9 +6,10 @@ import tensorflow.contrib.rnn as rnn
 
 import feudal_networks.policies.policy as policy
 import feudal_networks.policies.policy_utils as policy_utils
-from feudal_networks.models.models import SingleStepLSTM
+from feudal_networks.models.models import SingleStepLSTM, DilatedLSTM
 from feudal_networks.policies.configs.feudal_config import config
 from feudal_networks.policies.feudal_batch_processor import FeudalBatchProcessor
+
 
 class FeudalPolicy(policy.Policy):
     """
@@ -43,13 +44,13 @@ class FeudalPolicy(policy.Policy):
 
         self.state_in = [self.worker_lstm.state_in[0],\
                         self.worker_lstm.state_in[1],\
-                        self.manager_lstm.state_in[0],\
-                        self.manager_lstm.state_in[1]\
+                        self.manager_state_in[0],\
+                        self.manager_state_in[1]\
                         ]
         self.state_out = [self.worker_lstm.state_out[0],\
                           self.worker_lstm.state_out[1],\
-                          self.manager_lstm.state_out[0],\
-                          self.manager_lstm.state_out[1]\
+                          self.manager_state_out[0],\
+                          self.manager_state_out[1]\
                           ]
         # for v in self.var_list:
         #     print v
@@ -93,10 +94,15 @@ class FeudalPolicy(policy.Policy):
 
             # Calculate manager output g
             x = tf.expand_dims(self.s, [0])
-            self.manager_lstm = SingleStepLSTM(x,\
-                                                self.g_dim,\
-                                                step_size=tf.shape(self.obs)[:1])
-            g_hat = self.manager_lstm.output
+            self.manager_state_in = \
+                        [tf.placeholder(shape=(1, self.g_dim), dtype='float32'),\
+                        tf.placeholder(shape=(1, self.g_dim), dtype='float32')]
+            g_hat,self.manager_state_init,self.manager_state_out = \
+                            DilatedLSTM(x,self.g_dim,self.manager_state_in)
+            # self.manager_lstm = SingleStepLSTM(x,\
+            #                                     self.g_dim,\
+            #                                     step_size=tf.shape(self.obs)[:1])
+            # g_hat = self.manager_lstm.output
             self.g = tf.nn.l2_normalize(g_hat, dim=1)
 
             self.manager_vf = self._build_value(g_hat)
@@ -191,7 +197,7 @@ class FeudalPolicy(policy.Policy):
 
 
     def get_initial_features(self):
-        return np.zeros((1,1,self.g_dim),np.float32),self.worker_lstm.state_init+self.manager_lstm.state_init
+        return np.zeros((1,1,self.g_dim),np.float32),self.worker_lstm.state_init+self.manager_state_init
 
 
     def act(self, ob, g,cw,hw,cm,hm):
