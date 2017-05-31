@@ -30,7 +30,7 @@ def run(args, server):
     elif args.policy == 'feudal':
         trainer = FeudalPolicyOptimizer(env, args.task, args.policy,args.visualise)
     else:
-        print 'Invalid policy type'
+        print('Invalid policy type')
         exit(0)
 
 
@@ -125,7 +125,7 @@ Setting up Tensorflow for data parallel work
     parser.add_argument('--job-name', default="worker", help='worker or ps')
     parser.add_argument('--num-workers', default=1, type=int, help='Number of workers')
     parser.add_argument('--log-dir', default="/tmp/pong", help='Log directory path')
-    parser.add_argument('--env-id', default="PongDeterministic-v3", help='Environment id')
+    parser.add_argument('--env-id', default="PongDeterministic-v4", help='Environment id')
     parser.add_argument('--policy', type=str, default='lstm', help="lstm or feudal policy")
     parser.add_argument('-r', '--remotes', default=None,
                         help='References to environments to create (e.g. -r 20), '

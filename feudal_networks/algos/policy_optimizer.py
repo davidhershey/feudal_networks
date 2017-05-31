@@ -32,7 +32,7 @@ given a rollout, compute its returns and the advantage
     batch_adv = discount(delta_t, gamma * lambda_)
 
     features = rollout.features[0]
-    print features
+    # print features
     return Batch(batch_si, batch_a, batch_adv, batch_r, rollout.terminal, features)
 
 # Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
@@ -174,7 +174,7 @@ class PolicyOptimizer(object):
                 elif policy == 'feudal':
                     self.network = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
                 else:
-                    print "Policy type unknown"
+                    print("Policy type unknown")
                     exit(0)
 
         with tf.device(worker_device):
@@ -184,7 +184,7 @@ class PolicyOptimizer(object):
                 elif policy == 'feudal':
                     self.local_network = pi = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
                 else:
-                    print "Policy type unknown"
+                    print("Policy type unknown")
                     exit(0)
                 pi.global_step = self.global_step
             self.policy = pi
