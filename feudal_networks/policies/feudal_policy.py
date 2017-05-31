@@ -117,7 +117,8 @@ class FeudalPolicy(policy.Policy):
             U = tf.reshape(flat_logits,[-1,num_acts,self.k])
 
             # Calculate w
-            cut_g = tf.expand_dims(tf.stop_gradient(self.g), [1])
+            cut_g = tf.stop_gradient(self.g)
+            cut_g = tf.expand_dims(cut_g, [1])
             gstack = tf.concat([self.prev_g,cut_g], axis=1)
 
             self.last_c_g = gstack[:,1:]
@@ -129,6 +130,7 @@ class FeudalPolicy(policy.Policy):
             # Calculate policy and sample
             logits = tf.reshape(tf.matmul(U,w),[-1,num_acts])
             self.pi = tf.nn.softmax(logits)
+            self.log_pi = tf.nn.log_softmax(logits)
             self.sample = policy_utils.categorical_sample(
                 tf.reshape(logits,[-1,num_acts]), num_acts)[0, :]
 
@@ -144,13 +146,13 @@ class FeudalPolicy(policy.Policy):
     def _build_loss(self):
         cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
         dot = tf.reduce_sum(tf.multiply(self.s_diff,self.g ),axis=1)
-        mag = tf.norm(self.s_diff,axis=1)*tf.norm(self.g,axis=1)+.0001
+        gcut = tf.stop_gradient(self.g)
+        mag = tf.norm(self.s_diff,axis=1)*tf.norm(gcut,axis=1)+.0001
         dcos = dot/mag
         manager_loss = -tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
 
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf),[-1])
-        log_pi = tf.log(self.pi)
-        log_p = tf.reduce_sum(log_pi*self.ac,[1])
+        log_p = tf.reduce_sum(self.log_pi*self.ac,[1])
         worker_loss = (self.r + self.config.alpha*self.ri - cutoff_vf_worker)*log_p
         worker_loss = -tf.reduce_sum(worker_loss,axis=0)
 
@@ -160,12 +162,14 @@ class FeudalPolicy(policy.Policy):
         Aw = (self.r + self.config.alpha*self.ri)-self.worker_vf
         worker_vf_loss = .5*tf.reduce_sum(tf.square(Aw))
 
-        entropy = - tf.reduce_sum(self.pi * log_pi)
+        entropy = -tf.reduce_sum(self.pi * self.log_pi)
 
         beta = tf.train.polynomial_decay(config.beta_start, self.global_step,
                 end_learning_rate=config.beta_end,
                 decay_steps=config.decay_steps,
                 power=1)
+
+        # worker_loss = tf.Print(worker_loss,[manager_loss,worker_loss,manager_vf_loss,worker_vf_loss,entropy])
         self.loss = worker_loss+manager_loss+\
                     worker_vf_loss + manager_vf_loss-\
                     entropy*beta
