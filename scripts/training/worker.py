@@ -30,7 +30,7 @@ def run(args, server):
     elif args.policy == 'feudal':
         trainer = FeudalPolicyOptimizer(env, args.task, args.policy,args.visualise)
     else:
-        print 'Invalid policy type'
+        print('Invalid policy type')
         exit(0)
 
 
