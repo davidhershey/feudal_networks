@@ -164,7 +164,7 @@ class FeudalPolicy(policy.Policy):
         gcut = self.g
         mag = tf.norm(self.s_diff,axis=1)*tf.norm(gcut,axis=1)+.0001
         dcos = dot/mag
-        manager_loss = tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
+        manager_loss = -tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
 
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf),[-1])
         log_p = tf.reduce_sum(self.log_pi*self.ac,[1])
