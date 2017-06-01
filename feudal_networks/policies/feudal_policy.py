@@ -69,22 +69,22 @@ class FeudalPolicy(policy.Policy):
 
 
     def _build_perception(self):
-        # conv1 = tf.layers.conv2d(inputs=self.obs,
-        #                         filters=16,
-        #                         kernel_size=[8, 8],
-        #                         activation=tf.nn.elu,
-        #                         strides=4)
-        # conv2 = tf.layers.conv2d(inputs=conv1,
-        #                         filters=32,
-        #                         kernel_size=[4,4],
-        #                         activation=tf.nn.elu,
-        #                         strides=2)
-        # flattened_filters = policy_utils.flatten(conv2)
-        x = self.obs
-        for i in range(4):
-            x = tf.nn.elu(conv2d(x, 32,
-                "l{}".format(i + 1), [3, 3], [2, 2]))
-        flattened_filters = policy_utils.flatten(x)
+        conv1 = tf.layers.conv2d(inputs=self.obs,
+                                filters=16,
+                                kernel_size=[8, 8],
+                                activation=tf.nn.elu,
+                                strides=4)
+        conv2 = tf.layers.conv2d(inputs=conv1,
+                                filters=32,
+                                kernel_size=[4,4],
+                                activation=tf.nn.elu,
+                                strides=2)
+        flattened_filters = policy_utils.flatten(conv2)
+        #x = self.obs
+        #for i in range(4):
+        #    x = tf.nn.elu(conv2d(x, 32,
+        #        "l{}".format(i + 1), [3, 3], [2, 2]))
+        #flattened_filters = policy_utils.flatten(x)
         self.z = tf.layers.dense(inputs=flattened_filters,\
                                 units=256,\
                                 activation=tf.nn.elu)
@@ -102,7 +102,7 @@ class FeudalPolicy(policy.Policy):
                         [tf.placeholder(shape=(1, self.g_dim), dtype='float32',name='manger_lstm_in1'),\
                         tf.placeholder(shape=(1, self.g_dim), dtype='float32',name='manger_lstm_in2')]
             g_hat,self.manager_state_init,self.manager_state_out = \
-                            DilatedLSTM(x,self.g_dim,self.manager_state_in)
+                            DilatedLSTM(x,self.g_dim,self.manager_state_in,chunks=self.c)
             # self.manager_lstm = SingleStepLSTM(x,\
             #                                     self.g_dim,\
             #                                     step_size=tf.shape(self.obs)[:1])
