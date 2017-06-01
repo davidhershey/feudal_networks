@@ -138,7 +138,7 @@ def DilatedLSTM(s_t, size,state_in,chunks=8):
                                                   tf.transpose(s_t, [1, 0, 2]),
                                                   initializer=(state_in[1], rnn.LSTMStateTuple(*state_in), tf.constant(0)))
 
-    state_out = [final_states[0][-1, 0, :], final_states[1][-1, 0, :]]
+    state_out = [final_states[0][:, 0, :], final_states[1][:, 0, :]]
     cell_states = final_states[0][:, 0, :]
     out_states = final_states[1][:, 0, :]
     return out_states, state_init, state_out
