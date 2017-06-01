@@ -109,6 +109,7 @@ class RunnerThread(threading.Thread):
 
             self.queue.put(next(rollout_provider), timeout=600.0)
 
+from collections import deque
 def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     """
     The logic of the thread runner.  In brief, it constantly keeps on running
@@ -120,7 +121,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     # print last_c_g
     length = 0
     rewards = 0
-
+    reward_list = deque(maxlen=30)
     while True:
         terminal_end = False
         rollout = PartialRollout()
@@ -160,7 +161,9 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 if length >= timestep_limit or not env.metadata.get('semantics.autoreset'):
                     last_state = env.reset()
                 last_c_g,last_features = policy.get_initial_features()
-                print("Episode finished. Sum of rewards: %f. Length: %d" % (rewards, length))
+                reward_list.append(rewards)
+                mean_reward = np.mean(list(reward_list))
+                print("Episode finished. Sum of rewards: %f. Length: %d.  Mean Reward: %f" % (rewards, length,mean_reward))
                 length = 0
                 rewards = 0
                 break

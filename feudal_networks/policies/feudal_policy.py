@@ -69,22 +69,22 @@ class FeudalPolicy(policy.Policy):
 
 
     def _build_perception(self):
-        conv1 = tf.layers.conv2d(inputs=self.obs,
-                                filters=16,
-                                kernel_size=[8, 8],
-                                activation=tf.nn.elu,
-                                strides=4)
-        conv2 = tf.layers.conv2d(inputs=conv1,
-                                filters=32,
-                                kernel_size=[4,4],
-                                activation=tf.nn.elu,
-                                strides=2)
-        flattened_filters = policy_utils.flatten(conv2)
-        # x = self.obs
-        # for i in range(4):
-        #     x = tf.nn.elu(conv2d(x, 32,
-        #         "l{}".format(i + 1), [3, 3], [2, 2]))
-        # flattened_filters = policy_utils.flatten(x)
+        # conv1 = tf.layers.conv2d(inputs=self.obs,
+        #                         filters=16,
+        #                         kernel_size=[8, 8],
+        #                         activation=tf.nn.elu,
+        #                         strides=4)
+        # conv2 = tf.layers.conv2d(inputs=conv1,
+        #                         filters=32,
+        #                         kernel_size=[4,4],
+        #                         activation=tf.nn.elu,
+        #                         strides=2)
+        # flattened_filters = policy_utils.flatten(conv2)
+        x = self.obs
+        for i in range(4):
+            x = tf.nn.elu(conv2d(x, 32,
+                "l{}".format(i + 1), [3, 3], [2, 2]))
+        flattened_filters = policy_utils.flatten(x)
         self.z = tf.layers.dense(inputs=flattened_filters,\
                                 units=256,\
                                 activation=tf.nn.elu)
@@ -156,10 +156,10 @@ class FeudalPolicy(policy.Policy):
     def _build_loss(self):
         cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
         dot = tf.reduce_sum(tf.multiply(self.s_diff,self.g ),axis=1)
-        gcut = tf.stop_gradient(self.g)
+        gcut = self.g
         mag = tf.norm(self.s_diff,axis=1)*tf.norm(gcut,axis=1)+.0001
         dcos = dot/mag
-        manager_loss = -tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
+        manager_loss = tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
 
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf),[-1])
         log_p = tf.reduce_sum(self.log_pi*self.ac,[1])
