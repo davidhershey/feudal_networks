@@ -160,6 +160,8 @@ class FeudalPolicy(policy.Policy):
 
     def _build_loss(self):
         cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
+        # print cutoff_vf_manager
+        # print tf.stop_gradient(self.manager_vf)
         dot = tf.reduce_sum(tf.multiply(self.s_diff,self.g ),axis=1)
         gcut = self.g
         mag = tf.norm(self.s_diff,axis=1)*tf.norm(gcut,axis=1)+.0001
@@ -167,7 +169,7 @@ class FeudalPolicy(policy.Policy):
         manager_loss = -tf.reduce_sum((self.r-cutoff_vf_manager)*dcos)
 
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf),[-1])
-        log_p = tf.reduce_sum(self.log_pi*self.ac,[1])
+        log_p = tf.reduce_sum(self.log_pi*self.ac)
         worker_loss = (self.r + self.config.alpha*self.ri - cutoff_vf_worker)*log_p
         worker_loss = -tf.reduce_sum(worker_loss,axis=0)
 

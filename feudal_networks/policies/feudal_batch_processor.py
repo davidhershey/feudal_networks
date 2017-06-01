@@ -114,7 +114,7 @@ class FeudalBatchProcessor(object):
 
             # sum of g values used to derive w, input to the linear transform
             gsum = np.zeros_like(self.g[t - c])
-            for i in range(t - c, t + 1):
+            for i in range(t - c, t):
                 gsum += self.g[i]
 
             # add to the batch

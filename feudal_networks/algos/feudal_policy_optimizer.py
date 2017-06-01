@@ -196,7 +196,7 @@ class FeudalPolicyOptimizer(object):
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)
-            grads, _ = tf.clip_by_global_norm(grads, 40)
+            grads, _ = tf.clip_by_global_norm(grads, 50)
 
             # build sync
             # copy weights from the parameter server to the local model
