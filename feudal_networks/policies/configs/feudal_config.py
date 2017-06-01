@@ -7,3 +7,4 @@ class config():
     beta_start = .01
     beta_end = .001
     decay_steps = 50000000
+    worker_lstm_size = 256

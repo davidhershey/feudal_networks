@@ -118,9 +118,14 @@ class FeudalPolicy(policy.Policy):
 
             # Calculate U
             self.worker_lstm = SingleStepLSTM(tf.expand_dims(self.z, [0]),\
-                                                size=num_acts * self.k,
+                                                size=self.config.worker_lstm_size,
                                                 step_size=tf.shape(self.obs)[:1])
             flat_logits = self.worker_lstm.output
+
+            flat_logits = tf.layers.dense(inputs=flat_logits,\
+                                            units=num_acts * self.k,\
+                                            activation=tf.nn.elu)
+
 
             self.worker_vf = self._build_value(flat_logits)
 

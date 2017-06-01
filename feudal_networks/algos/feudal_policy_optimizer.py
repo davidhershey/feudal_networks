@@ -192,7 +192,7 @@ class FeudalPolicyOptimizer(object):
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts
-            self.runner = RunnerThread(env, self.policy, 20,visualise)
+            self.runner = RunnerThread(env, self.policy, 400,visualise)
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)
@@ -208,7 +208,7 @@ class FeudalPolicyOptimizer(object):
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
 
             # build train op
-            opt = tf.train.AdamOptimizer(1e-4)
+            opt = tf.train.AdamOptimizer(1e-4.2)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
