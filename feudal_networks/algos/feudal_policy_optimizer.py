@@ -175,20 +175,32 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
         yield rollout
 
 class FeudalPolicyOptimizer(object):
-    def __init__(self, env, task, policy,visualise):
+    def __init__(self, env, task, policy, config, visualise):
         self.env = env
         self.task = task
+        self.config = config
 
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
         with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
             with tf.variable_scope("global"):
-                self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
-                                                   trainable=False)
-                self.network = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
+                self.global_step = tf.get_variable("global_step", [], tf.int32, 
+                    initializer=tf.constant_initializer(0, dtype=tf.int32),
+                    trainable=False)
+                self.network = FeudalPolicy(
+                    env.observation_space.shape, 
+                    env.action_space.n, 
+                    self.global_step,
+                    config
+                )
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                self.local_network = pi = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
+                self.local_network = pi = FeudalPolicy(
+                    env.observation_space.shape, 
+                    env.action_space.n,
+                    self.global_step,
+                    config
+                )
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts

@@ -9,7 +9,7 @@ parser.add_argument('-w', '--num-workers', default=1, type=int,
 parser.add_argument('-r', '--remotes', default=None,
                     help='The address of pre-existing VNC servers and '
                          'rewarders to use (e.g. -r vnc://localhost:5900+15900,vnc://localhost:5901+15901).')
-parser.add_argument('-e', '--env-id', type=str, default="PongDeterministic-v3",
+parser.add_argument('-e', '--env-id', type=str, default="VisionMaze-v0",
                     help="Environment id")
 parser.add_argument('-l', '--log-dir', type=str, default="/tmp/pong",
                     help="Log directory path")
@@ -19,6 +19,8 @@ parser.add_argument('-m', '--mode', type=str, default='tmux',
                     help="tmux: run workers in a tmux session. nohup: run workers with nohup. child: run workers as child processes")
 parser.add_argument('-p', '--policy', type=str, default='lstm',
                     help="lstm or feudal policy")
+parser.add_argument('-c', '--config', type=str, default='',
+                    help="config filename, without \'.py\' extension. The default behavior is to match the config file to the choosen policy")
 
 # Add visualise tag
 parser.add_argument('--visualise', action='store_true',
@@ -37,7 +39,7 @@ def new_cmd(session, name, cmd, mode, logdir, shell):
 
 
 def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash', 
-        policy='lstm', mode='tmux', visualise=False):
+        policy='lstm', config='lstm_config', mode='tmux', visualise=False):
     # for launching the TF workers and for launching tensorboard
     base_cmd = [
         'CUDA_VISIBLE_DEVICES=',
@@ -58,7 +60,14 @@ def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash',
     cmds_map = [new_cmd(session, "ps", base_cmd + ["--job-name", "ps"], mode, logdir, shell)]
     for i in range(num_workers):
         cmds_map += [new_cmd(session,
-            "w-%d" % i, base_cmd + ["--job-name", "worker", "--task", str(i), "--remotes", remotes[i], "--policy", policy], mode, logdir, shell)]
+            "w-%d" % i, base_cmd + [
+                "--job-name", "worker", 
+                "--task", str(i), 
+                "--remotes", remotes[i], 
+                "--policy", policy,
+                "--config", config
+            ], 
+            mode, logdir, shell)]
 
     cmds_map += [new_cmd(session, "tb", ["tensorboard", "--logdir", logdir, "--port", "12345"], mode, logdir, shell)]
     if mode == 'tmux':
@@ -99,7 +108,16 @@ def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash',
 
 def run():
     args = parser.parse_args()
-    cmds, notes = create_commands("a3c", args.num_workers, args.remotes, args.env_id, args.log_dir, policy=args.policy, mode=args.mode, visualise=args.visualise)
+    if args.config == "":
+        args.config = '{}_config'.format(args.policy)
+    cmds, notes = create_commands("a3c", args.num_workers, args.remotes, 
+        args.env_id, args.log_dir, 
+        policy=args.policy, 
+        config=args.config,
+        mode=args.mode, 
+        visualise=args.visualise
+    )
+
     if args.dry_run:
         print("Dry-run mode due to -n flag, otherwise the following commands would be executed:")
     else:
@@ -111,7 +129,6 @@ def run():
             os.environ["TMUX"] = ""
         os.system("\n".join(cmds))
     print('\n'.join(notes))
-
 
 if __name__ == "__main__":
     run()

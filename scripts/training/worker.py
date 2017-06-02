@@ -23,16 +23,44 @@ class FastSaver(tf.train.Saver):
         super(FastSaver, self).save(sess, save_path, global_step, latest_filename,
                                     meta_graph_suffix, False)
 
+def build_config(args):
+
+    try:
+        config_path = 'configs.{}'.format(args.config)
+        config_module = __import__(config_path, fromlist=["configs"])
+    except ImportError as e:
+        print('error importing config file: {}'.format(args.config))
+        print('make sure that the file exists')
+        print('the argument should not end in \'.py\'')
+        print('but should just be the name without \'.py\'')
+        print('(though the actual file should of course have \'.py\')')
+        raise(e)
+
+    try:
+        config = config_module.Config()
+    except AttributeError as e:
+        print('invalid config file: {}'.format(args.config))
+        print('config file must have a class named \'Config\'')
+        raise(e)
+
+    return config
+
+def build_optimizer(env, config, args):
+    if args.policy == 'lstm':
+        trainer = PolicyOptimizer(
+            env, args.task, args.policy, config, args.visualise,)
+    elif args.policy == 'feudal':
+        trainer = FeudalPolicyOptimizer(
+            env, args.task, args.policy, config, args.visualise,)
+    else:
+        raise ValueError("invalid policy: {}".format(args.policy))
+
+    return trainer
+
 def run(args, server):
     env = create_env(args.env_id, client_id=str(args.task), remotes=args.remotes)
-    if args.policy == 'lstm':
-        trainer = PolicyOptimizer(env, args.task, args.policy,args.visualise)
-    elif args.policy == 'feudal':
-        trainer = FeudalPolicyOptimizer(env, args.task, args.policy,args.visualise)
-    else:
-        print('Invalid policy type')
-        exit(0)
-
+    config = build_config(args)
+    trainer = build_optimizer(env, config, args)
 
     # Variable names that start with "local" are not saved in checkpoints.
     if use_tf12_api:
@@ -54,7 +82,7 @@ def run(args, server):
         logger.info("Initializing all parameters.")
         ses.run(init_all_op)
 
-    config = tf.ConfigProto(device_filters=["/job:ps", "/job:worker/task:{}/cpu:0".format(args.task)])
+    configproto = tf.ConfigProto(device_filters=["/job:ps", "/job:worker/task:{}/cpu:0".format(args.task)])
     logdir = os.path.join(args.log_dir, 'train')
 
     if use_tf12_api:
@@ -80,7 +108,7 @@ def run(args, server):
     logger.info(
         "Starting session. If this hangs, we're mostly likely waiting to connect to the parameter server. " +
         "One common cause is that the parameter server DNS name isn't resolving yet, or is misspecified.")
-    with sv.managed_session(server.target, config=config) as sess, sess.as_default():
+    with sv.managed_session(server.target, config=configproto) as sess, sess.as_default():
         sess.run(trainer.sync)
         trainer.start(sess, summary_writer)
         global_step = sess.run(trainer.global_step)
@@ -127,6 +155,9 @@ Setting up Tensorflow for data parallel work
     parser.add_argument('--log-dir', default="/tmp/pong", help='Log directory path')
     parser.add_argument('--env-id', default="PongDeterministic-v4", help='Environment id')
     parser.add_argument('--policy', type=str, default='lstm', help="lstm or feudal policy")
+    parser.add_argument('-c', '--config', type=str, default='',
+                    help="config filename, without \'.py\' extension. The default behavior is to match the config file to the choosen policy")
+
     parser.add_argument('-r', '--remotes', default=None,
                         help='References to environments to create (e.g. -r 20), '
                              'or the address of pre-existing VNC servers and '

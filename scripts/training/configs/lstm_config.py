@@ -1,4 +1,4 @@
-class config():
+class Config(object):
     size = 256
     n_percept_hidden_layer = 4
     n_percept_filters = 32

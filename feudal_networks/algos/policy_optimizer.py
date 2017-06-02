@@ -106,7 +106,7 @@ class RunnerThread(threading.Thread):
 
             self.queue.put(next(rollout_provider), timeout=600.0)
 
-def env_runner(env, policy, num_local_steps, summary_writer,visualise):
+def env_runner(env, policy, num_local_steps, summary_writer, visualise):
     """
     The logic of the thread runner.  In brief, it constantly keeps on running
     the policy, and as long as the rollout exceeds a certain length, the thread
@@ -160,36 +160,37 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
         yield rollout
 
 class PolicyOptimizer(object):
-    def __init__(self, env, task, policy,visualise):
+    def __init__(self, env, task, policy, config, visualise):
         self.env = env
         self.task = task
+        self.config = config
 
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
         with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
             with tf.variable_scope("global"):
-                self.global_step = tf.get_variable("global_step", [], tf.int32, initializer=tf.constant_initializer(0, dtype=tf.int32),
-                                                   trainable=False)
-                if policy == 'lstm':
-                    self.network = LSTMPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                elif policy == 'feudal':
-                    self.network = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                else:
-                    print("Policy type unknown")
-                    exit(0)
+                self.global_step = tf.get_variable("global_step", [], tf.int32,
+                    initializer=tf.constant_initializer(0, dtype=tf.int32),
+                    trainable=False)
+                self.network = LSTMPolicy(
+                    env.observation_space.shape, 
+                    env.action_space.n,
+                    self.global_step,
+                    config
+                )
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                if policy == 'lstm':
-                    self.local_network = pi = LSTMPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                elif policy == 'feudal':
-                    self.local_network = pi = FeudalPolicy(env.observation_space.shape, env.action_space.n,self.global_step)
-                else:
-                    print("Policy type unknown")
-                    exit(0)
+                self.local_network = pi = LSTMPolicy(
+                    env.observation_space.shape, 
+                    env.action_space.n,
+                    self.global_step,
+                    config
+                )
+                
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts
-            self.runner = RunnerThread(env, self.policy, 20,visualise)
+            self.runner = RunnerThread(env, self.policy, 20, visualise)
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)

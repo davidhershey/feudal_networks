@@ -6,8 +6,7 @@ import tensorflow.contrib.rnn as rnn
 
 import feudal_networks.policies.policy as policy
 import feudal_networks.policies.policy_utils as policy_utils
-from feudal_networks.models.models import SingleStepLSTM, DilatedLSTM,conv2d
-from feudal_networks.policies.configs.feudal_config import config
+from feudal_networks.models.models import SingleStepLSTM, DilatedLSTM, conv2d
 from feudal_networks.policies.feudal_batch_processor import FeudalBatchProcessor
 
 
@@ -16,14 +15,14 @@ class FeudalPolicy(policy.Policy):
     Policy of the Feudal network architecture.
     """
 
-    def __init__(self, obs_space, act_space,global_step):
-        self.global_step = global_step
+    def __init__(self, obs_space, act_space, global_step, config):
         self.obs_space = obs_space
         self.act_space = act_space
+        self.global_step = global_step
         self.config = config
-        self.k = config.k #Dimensionality of w
-        self.g_dim = config.g_dim
-        self.c = config.c
+        self.k = config.k # dimensionality of w
+        self.g_dim = config.g_dim # dimensionality of goals
+        self.c = config.c # manager timesteps
         self.batch_processor = FeudalBatchProcessor(self.c)
         self._build_model()
 
@@ -69,17 +68,6 @@ class FeudalPolicy(policy.Policy):
 
 
     def _build_perception(self):
-        # conv1 = tf.layers.conv2d(inputs=self.obs,
-        #                         filters=16,
-        #                         kernel_size=[8, 8],
-        #                         activation=tf.nn.elu,
-        #                         strides=4)
-        # conv2 = tf.layers.conv2d(inputs=conv1,
-        #                         filters=32,
-        #                         kernel_size=[4,4],
-        #                         activation=tf.nn.elu,
-        #                         strides=2)
-        # flattened_filters = policy_utils.flatten(conv2)
         x = self.obs
         for i in range(4):
             x = tf.nn.elu(conv2d(x, 32,
@@ -181,10 +169,13 @@ class FeudalPolicy(policy.Policy):
 
         entropy = -tf.reduce_sum(self.pi * self.log_pi)
 
-        beta = tf.train.polynomial_decay(config.beta_start, self.global_step,
-                end_learning_rate=config.beta_end,
-                decay_steps=config.decay_steps,
-                power=1)
+        beta = tf.train.polynomial_decay(
+            self.config.beta_start, 
+            self.global_step,
+            end_learning_rate=self.config.beta_end,
+            decay_steps=self.config.decay_steps,
+            power=1
+        )
 
         # worker_loss = tf.Print(worker_loss,[manager_loss,worker_loss,manager_vf_loss,worker_vf_loss,entropy])
         self.loss = worker_loss+manager_loss+\
