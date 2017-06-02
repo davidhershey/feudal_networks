@@ -120,3 +120,6 @@ class VisionMazeEnv(gym.Env):
 
         nx = max(0, nx)
         return nx
+
+    def _render(self, mode='human', close=False):
+        return 

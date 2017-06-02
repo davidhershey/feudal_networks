@@ -38,7 +38,7 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME",
             tf.random_uniform_initializer(-w_bound, w_bound),
             collections=collections)
         b = tf.get_variable("b", [1, 1, 1, num_filters],
-            initializer=tf.constant_initializer(0.0),
+            initializer=tf.random_uniform_initializer(-w_bound, w_bound),
             collections=collections)
         return tf.nn.conv2d(x, w, stride_shape, pad) + b
 
@@ -70,7 +70,7 @@ def build_lstm(x, size, name, step_size):
 
 class SingleStepLSTM(object):
 
-    def __init__(self,x,size,step_size):
+    def __init__(self, x, size, step_size):
         lstm = rnn.BasicLSTMCell(size, state_is_tuple=True)
 
         c_init = np.zeros((1, lstm.state_size.c), np.float32)

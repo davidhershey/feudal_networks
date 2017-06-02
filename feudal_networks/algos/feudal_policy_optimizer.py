@@ -33,7 +33,6 @@ given a rollout, compute its returns and the advantage
     return Batch(batch_si, batch_a, batch_r, rollout.terminal,batch_s,batch_g, features)
 
 Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
-# Batch = namedtuple("Batch", ["si", "a", "adv", "r", "terminal", "features"])
 
 class PartialRollout(object):
     """

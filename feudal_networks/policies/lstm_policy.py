@@ -28,7 +28,6 @@ class LSTMPolicy(object):
                                     [None],
                                     name="r")
 
-        print(self.r)
         # build perception
         for i in range(config.n_percept_hidden_layer):
             x = tf.nn.elu(conv2d(x, config.n_percept_filters,
@@ -61,7 +60,7 @@ class LSTMPolicy(object):
         pi_loss = - tf.reduce_sum(
                     tf.reduce_sum(log_prob_tf * self.ac, [1]) * self.adv)
         entropy = - tf.reduce_sum(prob_tf * log_prob_tf)
-        vf_loss = 0.5 * tf.reduce_sum(tf.square(self.vf - self.r))
+        vf_loss = tf.reduce_sum(tf.square(self.vf - self.r))
         beta = tf.train.polynomial_decay(config.beta_start, self.global_step,
                 end_learning_rate=config.beta_end,
                 decay_steps=config.decay_steps,
@@ -75,8 +74,7 @@ class LSTMPolicy(object):
         tf.summary.scalar("model/value_loss", vf_loss / bs)
         tf.summary.scalar("model/value_loss_scaled", vf_loss / bs * .5)
         tf.summary.scalar("model/entropy", entropy / bs)
-        tf.summary.scalar("model/entropy_loss_scaleed", -entropy / bs * beta)
-        # tf.summary.scalar("model/grad_global_norm", tf.global_norm(grads))
+        tf.summary.scalar("model/entropy_loss_scaled", -entropy / bs * beta)
         tf.summary.scalar("model/var_global_norm", tf.global_norm(self.var_list))
         tf.summary.scalar("model/beta", beta)
         tf.summary.image("model/state", self.obs)
