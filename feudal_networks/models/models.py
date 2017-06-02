@@ -37,6 +37,9 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME",
         w = tf.get_variable("W", filter_shape, dtype,
             tf.random_uniform_initializer(-w_bound, w_bound),
             collections=collections)
+        # adding initialization to bias because otherwise the network will 
+        # output all zeros, which is normally fine, but in the feudal case 
+        # this yields a divide by zero error. Bounds are just small random.
         b = tf.get_variable("b", [1, 1, 1, num_filters],
             initializer=tf.random_uniform_initializer(-w_bound, w_bound),
             collections=collections)

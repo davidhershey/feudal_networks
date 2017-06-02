@@ -19,13 +19,14 @@ class Config(object):
     z_dim = 256
     vf_hidden_size = 128
     eps = 1e-6
-    
-    # worker
-    worker_lstm_size = 256
-    k = 16 # dimensionality of w
-    alpha = .6
 
     # manager
     manager_rnn_type = 'lstm'
     g_dim = 256 # s_dim, manager_lstm_size must be this as well
     c = 5 # manager timesteps
+
+    # worker
+    # constrained to match g_dim because of the way features are stored
+    worker_lstm_size = g_dim 
+    k = 16 # dimensionality of w
+    alpha = .6

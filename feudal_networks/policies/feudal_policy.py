@@ -149,34 +149,68 @@ class FeudalPolicy(policy.Policy):
                 size=self.config.worker_lstm_size,
                 step_size=tf.shape(self.obs)[:1]
             )
-            flat_logits = self.worker_lstm.output
+            lstm_output = self.worker_lstm.output
+            
+
+            self.worker_vf = self._build_value(lstm_output)
+
+            flat_logits_hidden = tf.layers.dense(
+                inputs=lstm_output,
+                units=num_acts * self.k,
+                activation=tf.nn.elu,
+                name='flat_logits_hidden'
+            )
             flat_logits = tf.layers.dense(
-                inputs=flat_logits,
+                inputs=flat_logits_hidden,
                 units=num_acts * self.k,
                 activation=None,
                 name='flat_logits'
             )
 
-            self.worker_vf = self._build_value(flat_logits)
-            U = tf.reshape(flat_logits, 
+            self.U = tf.reshape(flat_logits, 
                 shape=[-1, num_acts, self.k],
                 name='U')
+
+            if self.config.verbose:
+                self.U = tf.Print(self.U, [self.U], 
+                    message='\nworker U: ', summarize=num_acts * self.k)
 
             # Calculate w
             cut_g = tf.stop_gradient(self.g)
             cut_g = tf.expand_dims(cut_g, [1])
-            gstack = tf.concat([self.prev_g,cut_g], axis=1)
+            gstack = tf.concat([self.prev_g, cut_g], axis=1)
 
             self.last_c_g = gstack[:,1:]
             gsum = tf.reduce_sum(gstack, axis=1)
-            phi = tf.get_variable("phi", (self.g_dim, self.k))
+
+            if self.config.verbose:
+                gsum = tf.Print(gsum, [gsum], 
+                    message='\nworker gsum: ', summarize=32)
+
+            phi = tf.get_variable("phi", (self.g_dim, self.k),
+                initializer=normalized_columns_initializer(1.))
+
+            if self.config.verbose:
+                phi = tf.Print(phi, [phi], 
+                    message='\nworker phi: ', summarize=5)
+
             w = tf.matmul(gsum, phi)
+
+            if self.config.verbose:
+                w = tf.Print(w, [w], 
+                    message='\nworker w: ', summarize=self.k)
+
             w = tf.expand_dims(w, [2])
 
             # calculate policy and sample
-            logits = tf.reshape(tf.matmul(U, w),[-1, num_acts])
+            logits = tf.reshape(tf.matmul(self.U, w),[-1, num_acts])
             self.pi = tf.nn.softmax(logits)
             self.log_pi = tf.nn.log_softmax(logits)
+
+            if self.config.verbose:
+                self.pi = tf.Print(self.pi, [logits, self.pi, self.log_pi], 
+                    message='\nworker logits, pi, log_pi: ', summarize=15)
+
             self.sample = policy_utils.categorical_sample(
                 tf.reshape(logits,[-1,num_acts]), num_acts)[0, :]
 
@@ -207,14 +241,22 @@ class FeudalPolicy(policy.Policy):
         # manager policy loss
         cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
         dot = tf.reduce_sum(tf.multiply(self.s_diff, self.g), axis=1)
-        gcut = self.g
+        gcut = tf.stop_gradient(self.g)
         mag = tf.norm(self.s_diff, axis=1) * tf.norm(gcut, axis=1) + self.config.eps
         dcos = dot / mag
+
+        if self.config.verbose:
+            dcos = tf.Print(dcos, [dcos, dot, mag], 
+                message='\nfeudal loss dcos, dot, magnitude: ', summarize=15)
+            cutoff_vf_manager = tf.Print(cutoff_vf_manager, 
+                [self.r, cutoff_vf_manager], 
+                message='\nfeudal loss return, manager vf: ', summarize=10)
+
         manager_loss = -tf.reduce_sum((self.r - cutoff_vf_manager) * dcos)
 
         # manager value loss
         Am = self.r-self.manager_vf
-        manager_vf_loss = .5*tf.reduce_sum(tf.square(Am))
+        manager_vf_loss = .5 * tf.reduce_sum(tf.square(Am))
 
         # worker policy loss
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf), [-1])
@@ -253,6 +295,14 @@ class FeudalPolicy(policy.Policy):
                 tf.get_variable_scope().name)))
         tf.summary.scalar("model/beta", beta)
         tf.summary.image("model/state", self.obs)
+        tf.summary.image("model/goal", tf.reshape(self.g, (-1, self.g_dim, 1, 1)))
+
+        # additional summaries
+
+        tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))
+        tf.summary.scalar("model/dcos_magnitude", tf.reduce_mean(mag))
+        tf.summary.scalar("model/return", tf.reduce_mean(self.r))
+
         self.summary_op = tf.summary.merge_all()
 
     def get_initial_features(self):
