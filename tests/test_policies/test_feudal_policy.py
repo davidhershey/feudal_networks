@@ -101,7 +101,7 @@ class TestFeudalPolicy(unittest.TestCase):
             config.k = 2
             obs_space = (80,80,3)
             act_space = 2
-            lr = 5e-4
+            lr = 5e-3
             g_dim = config.g_dim
             config.worker_lstm_size = config.g_dim
             pi = FeudalPolicy(obs_space, act_space, global_step, config)
@@ -110,12 +110,10 @@ class TestFeudalPolicy(unittest.TestCase):
 
             # assign all worker vars to be zero except for U bias
             worker_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            worker_vars = [v for v in worker_vars if 'worker' in v.name]
+            worker_vars = [v for v in worker_vars 
+            if ('worker' in v.name and 'phi' not in v.name)]
             worker_zero_assigns = [tf.assign(v, tf.zeros_like(v)) 
-                for v in worker_vars if
-                'flat_logits/b' not in v.name
-                or 'phi' not in v.name
-            ]
+                for v in worker_vars if 'flat_logits/b' not in v.name]
 
             # assign U_bias so that action 0 is ones and 1 is negative ones
             U_bias = np.ones((act_space, config.k), dtype=np.float32)
@@ -124,15 +122,10 @@ class TestFeudalPolicy(unittest.TestCase):
             U_bias_var = [v for v in worker_vars if 'flat_logits/b' in v.name][0]
             worker_U_assigns = tf.assign(U_bias_var, U_bias)
 
-            phi_var = [v for v in worker_vars if 'phi' in v.name][0]
-            phi = np.ones((config.g_dim, config.k))
-            worker_phi_assigns = tf.assign(phi_var, phi)
-
             # group them
             worker_assigns = tf.group(
                 *worker_zero_assigns, 
                 worker_U_assigns,
-                worker_phi_assigns
             )
 
             session.run(tf.global_variables_initializer())
@@ -170,8 +163,8 @@ class TestFeudalPolicy(unittest.TestCase):
                 pi.state_in[3]: manager_features[1]
             }
 
-            n_updates = 1000
-            verbose = True
+            n_updates = 100
+            verbose = False
             for i in range(n_updates):
                 # set worker weights
                 session.run(worker_assigns)
@@ -180,7 +173,98 @@ class TestFeudalPolicy(unittest.TestCase):
                 feed_dict = feed_dict_1 if i % 2 == 0 else feed_dict_2
                 # s_diff needs to be random because the constant cases 
                 # give poor performance
-                feed_dict[pi.s_diff] = [np.ones(g_dim) * -1]#[np.random.randn(g_dim)]
+                feed_dict[pi.s_diff] = [np.random.randn(g_dim)]
+                outputs_list = [pi.loss, pi.manager_vf, pi.pi, train_op]
+                loss, vf, policy, _ = session.run(
+                    outputs_list, feed_dict=feed_dict)
+                if verbose:
+                    print('loss: {}\npolicy: {}\nvalue: {}\n-------'.format(
+                        loss, policy, vf))
+
+            self.assertTrue(policy[0,0] < policy[0,1])
+            self.assertTrue(vf > .4 and vf < .6)
+
+    def test_simple_worker_behavior(self):
+        with tf.Session() as session:
+            global_step = tf.get_variable("global_step", [], tf.int32,
+                    initializer=tf.constant_initializer(0, dtype=tf.int32),
+                    trainable=False)
+            config = test_config.Config()
+            config.g_dim = 2
+            config.k = 2
+            obs_space = (80,80,3)
+            act_space = 2
+            lr = 5e-3
+            g_dim = config.g_dim
+            config.worker_lstm_size = config.g_dim
+            pi = FeudalPolicy(obs_space, act_space, global_step, config)
+            
+            train_op = tf.train.AdamOptimizer(lr).minimize(pi.loss)
+
+            # assign all manager vars to be zero except for bias to g
+            manager_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            manager_vars = [v for v in manager_vars if 'manager' in v.name]
+            manager_zero_assigns = [tf.assign(v, tf.zeros_like(v)) 
+                for v in manager_vars if 'g_hat/b' not in v.name]
+
+            # assign goal bias so all ones
+            g_bias = np.ones((config.g_dim), dtype=np.float32)
+            g_bias = tf.constant(g_bias)
+            g_bias_var = [v for v in manager_vars if 'g_hat/b' in v.name][0]
+            manager_g_assigns = tf.assign(g_bias_var, g_bias)
+
+            # group them
+            manager_assigns = tf.group(
+                *manager_zero_assigns, 
+                manager_g_assigns,
+            )
+
+            session.run(tf.global_variables_initializer())
+
+            _, features = pi.get_initial_features()
+            worker_features = features[0:2]
+            manager_features = features[2:]
+
+            obs = [np.zeros(obs_space)]
+            prev_g = [np.zeros((1, g_dim))]
+
+            # single step episode where the agent took action 0 and got return 0
+            feed_dict_1 = {
+                pi.obs: obs,
+                pi.ac: [[1, 0]],
+                pi.r: [0],
+                pi.prev_g: prev_g,
+                pi.ri: [0],
+                pi.state_in[0]: worker_features[0],
+                pi.state_in[1]: worker_features[1],
+                pi.state_in[2]: manager_features[0],
+                pi.state_in[3]: manager_features[1]
+            }   
+
+            # single step episode where the agent took action 1 and got return 1
+            feed_dict_2 = {
+                pi.obs: obs,
+                pi.ac: [[0, 1]],
+                pi.r: [1],
+                pi.prev_g: prev_g,
+                pi.ri: [0],
+                pi.state_in[0]: worker_features[0],
+                pi.state_in[1]: worker_features[1],
+                pi.state_in[2]: manager_features[0],
+                pi.state_in[3]: manager_features[1]
+            }
+
+            n_updates = 200
+            verbose = False
+            for i in range(n_updates):
+                # set worker weights
+                session.run(manager_assigns)
+
+                # run a train update
+                feed_dict = feed_dict_1 if i % 2 == 0 else feed_dict_2
+                # s_diff needs to be random because the constant cases 
+                # give poor performance
+                feed_dict[pi.s_diff] = [np.random.randn(g_dim)]
                 outputs_list = [pi.loss, pi.manager_vf, pi.pi, train_op]
                 loss, vf, policy, _ = session.run(
                     outputs_list, feed_dict=feed_dict)
@@ -189,6 +273,7 @@ class TestFeudalPolicy(unittest.TestCase):
                         loss, policy, vf))
                     input()
 
+            np.testing.assert_array_almost_equal(policy, [[0,1]])
     
 
 if __name__ == '__main__':

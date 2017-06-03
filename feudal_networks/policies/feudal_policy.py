@@ -116,7 +116,16 @@ class FeudalPolicy(policy.Policy):
             else:
                 raise ValueError('invalid config.rnn_type: {}'.format(
                     self.config.manager_rnn_type))
-
+            
+            hidden_g_hat = tf.layers.dense(
+                        inputs=g_hat,
+                        units=self.config.g_dim,
+                        activation=tf.nn.elu,
+                        name='hidden_g_hat'
+            )
+            g_hat = linear(hidden_g_hat, self.config.g_dim, 'g_hat', 
+                initializer=normalized_columns_initializer(1.0)
+            )
             self.g = tf.nn.l2_normalize(g_hat, dim=1)
 
             if self.config.verbose:
@@ -151,7 +160,6 @@ class FeudalPolicy(policy.Policy):
             )
             lstm_output = self.worker_lstm.output
             
-
             self.worker_vf = self._build_value(lstm_output)
 
             flat_logits_hidden = tf.layers.dense(
@@ -195,12 +203,11 @@ class FeudalPolicy(policy.Policy):
                     message='\nworker phi: ', summarize=5)
 
             w = tf.matmul(gsum, phi)
+            w = tf.expand_dims(w, [2])
 
             if self.config.verbose:
                 w = tf.Print(w, [w], 
                     message='\nworker w: ', summarize=self.k)
-
-            w = tf.expand_dims(w, [2])
 
             # calculate policy and sample
             logits = tf.reshape(tf.matmul(self.U, w),[-1, num_acts])
@@ -255,7 +262,7 @@ class FeudalPolicy(policy.Policy):
         manager_loss = -tf.reduce_sum((self.r - cutoff_vf_manager) * dcos)
 
         # manager value loss
-        Am = self.r-self.manager_vf
+        Am = self.r - self.manager_vf
         manager_vf_loss = .5 * tf.reduce_sum(tf.square(Am))
 
         # worker policy loss
@@ -288,17 +295,22 @@ class FeudalPolicy(policy.Policy):
         tf.summary.scalar("model/value_loss", manager_vf_loss / bs)
         tf.summary.scalar("model/value_loss_scaled", manager_vf_loss / bs * .5)
         tf.summary.scalar("model/entropy", entropy / bs)
-        tf.summary.scalar("model/entropy_loss_scaleed", -entropy / bs * beta)
+        tf.summary.scalar("model/entropy_loss_scaled", -entropy / bs * beta)
         tf.summary.scalar("model/var_global_norm", 
             tf.global_norm(tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, 
                 tf.get_variable_scope().name)))
         tf.summary.scalar("model/beta", beta)
-        tf.summary.image("model/state", self.obs)
-        tf.summary.image("model/goal", tf.reshape(self.g, (-1, self.g_dim, 1, 1)))
+        tf.summary.image("model/obs", self.obs)
+
 
         # additional summaries
-
+        tf.summary.image("model/summed_obs", 
+            tf.reduce_mean(self.obs, axis=0, keep_dims=True))
+        tf.summary.image("model/goal_mul_s_diff", tf.reshape(
+            tf.multiply(self.s_diff, self.g), (-1, 16, 16, 1)))
+        tf.summary.scalar("model/intrinsic_reward", tf.reduce_mean(
+            self.config.alpha * self.ri))
         tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))
         tf.summary.scalar("model/dcos_magnitude", tf.reduce_mean(mag))
         tf.summary.scalar("model/return", tf.reduce_mean(self.r))

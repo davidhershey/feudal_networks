@@ -77,7 +77,11 @@ class LSTMPolicy(object):
         tf.summary.scalar("model/entropy_loss_scaled", -entropy / bs * beta)
         tf.summary.scalar("model/var_global_norm", tf.global_norm(self.var_list))
         tf.summary.scalar("model/beta", beta)
-        tf.summary.image("model/state", self.obs)
+        tf.summary.image("model/obs", self.obs)
+
+        # additional summaries
+        tf.summary.image("model/summed_obs", 
+            tf.reduce_mean(self.obs, axis=0, keep_dims=True))
         self.summary_op = tf.summary.merge_all()
 
     def get_initial_features(self):

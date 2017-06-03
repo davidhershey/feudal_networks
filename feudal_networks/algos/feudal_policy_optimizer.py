@@ -203,7 +203,7 @@ class FeudalPolicyOptimizer(object):
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts
-            self.runner = RunnerThread(env, self.policy, 400,visualise)
+            self.runner = RunnerThread(env, self.policy, self.config.num_local_steps, visualise)
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)
@@ -219,10 +219,21 @@ class FeudalPolicyOptimizer(object):
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
 
             # build train op
-            opt = tf.train.AdamOptimizer(1e-4)
+            opt = tf.train.AdamOptimizer(self.config.learning_rate)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
+
+            # summaries
+            tf.summary.scalar("model/grad_global_norm", tf.global_norm(grads))
+            worker_grads = tf.gradients(pi.loss, 
+                [v for v in pi.var_list if 'worker' in v.name])
+            tf.summary.scalar("model/worker_grad_global_norm", tf.global_norm(
+                worker_grads))
+            manager_grads = tf.gradients(pi.loss, 
+                [v for v in pi.var_list if 'manager' in v.name])
+            tf.summary.scalar("model/manager_grad_global_norm", tf.global_norm(
+                manager_grads))
 
     def start(self, sess, summary_writer):
         self.runner.start_runner(sess, summary_writer)
@@ -252,7 +263,7 @@ class FeudalPolicyOptimizer(object):
         # recent global weights
         sess.run(self.sync)
         rollout = self.pull_batch_from_queue()
-        batch = process_rollout(rollout, gamma=.99)
+        batch = process_rollout(rollout, gamma=self.config.discount)
         batch = self.policy.update_batch(batch)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
         # should_compute_summary = True
