@@ -1,5 +1,5 @@
 class Config(object):
-    # common 
+    # common
     verbose = False
     size = 256
     n_percept_hidden_layer = 4
@@ -17,13 +17,15 @@ class Config(object):
     vf_hidden_size = 128
     eps = 1e-8
 
+    g_eps = .05
+
     # manager
-    manager_rnn_type = 'lstm'
-    g_dim = 256 # s_dim, manager_lstm_size must be this as well
-    c = 5 # manager timesteps
+    manager_rnn_type = 'dilated'
+    g_dim = 300 # s_dim, manager_lstm_size must be this as well
+    c = 10 # manager timesteps
 
     # worker
     # constrained to match g_dim because of the way features are stored
-    worker_lstm_size = g_dim 
+    worker_lstm_size = g_dim
     k = 16 # dimensionality of w
     alpha = .6

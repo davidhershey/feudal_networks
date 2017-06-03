@@ -60,7 +60,7 @@ class TestFeudalPolicy(unittest.TestCase):
                 pi.state_in[1]: worker_features[1],
                 pi.state_in[2]: manager_features[0],
                 pi.state_in[3]: manager_features[1]
-            }   
+            }
 
             # single step episode where the agent took action 1 and got return 1
             feed_dict_2 = {
@@ -105,14 +105,14 @@ class TestFeudalPolicy(unittest.TestCase):
             g_dim = config.g_dim
             config.worker_lstm_size = config.g_dim
             pi = FeudalPolicy(obs_space, act_space, global_step, config)
-            
+
             train_op = tf.train.AdamOptimizer(lr).minimize(pi.loss)
 
             # assign all worker vars to be zero except for U bias
             worker_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-            worker_vars = [v for v in worker_vars 
+            worker_vars = [v for v in worker_vars
             if ('worker' in v.name and 'phi' not in v.name)]
-            worker_zero_assigns = [tf.assign(v, tf.zeros_like(v)) 
+            worker_zero_assigns = [tf.assign(v, tf.zeros_like(v))
                 for v in worker_vars if 'flat_logits/b' not in v.name]
 
             # assign U_bias so that action 0 is ones and 1 is negative ones
@@ -124,7 +124,7 @@ class TestFeudalPolicy(unittest.TestCase):
 
             # group them
             worker_assigns = tf.group(
-                *worker_zero_assigns, 
+                *worker_zero_assigns,
                 worker_U_assigns,
             )
 
@@ -148,7 +148,7 @@ class TestFeudalPolicy(unittest.TestCase):
                 pi.state_in[1]: worker_features[1],
                 pi.state_in[2]: manager_features[0],
                 pi.state_in[3]: manager_features[1]
-            }   
+            }
 
             # single step episode where the agent took action 1 and got return 1
             feed_dict_2 = {
@@ -171,7 +171,7 @@ class TestFeudalPolicy(unittest.TestCase):
 
                 # run a train update
                 feed_dict = feed_dict_1 if i % 2 == 0 else feed_dict_2
-                # s_diff needs to be random because the constant cases 
+                # s_diff needs to be random because the constant cases
                 # give poor performance
                 feed_dict[pi.s_diff] = [np.random.randn(g_dim)]
                 outputs_list = [pi.loss, pi.manager_vf, pi.pi, train_op]
@@ -198,13 +198,13 @@ class TestFeudalPolicy(unittest.TestCase):
             g_dim = config.g_dim
             config.worker_lstm_size = config.g_dim
             pi = FeudalPolicy(obs_space, act_space, global_step, config)
-            
+
             train_op = tf.train.AdamOptimizer(lr).minimize(pi.loss)
 
             # assign all manager vars to be zero except for bias to g
             manager_vars = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
             manager_vars = [v for v in manager_vars if 'manager' in v.name]
-            manager_zero_assigns = [tf.assign(v, tf.zeros_like(v)) 
+            manager_zero_assigns = [tf.assign(v, tf.zeros_like(v))
                 for v in manager_vars if 'g_hat/b' not in v.name]
 
             # assign goal bias so all ones
@@ -215,7 +215,7 @@ class TestFeudalPolicy(unittest.TestCase):
 
             # group them
             manager_assigns = tf.group(
-                *manager_zero_assigns, 
+                *manager_zero_assigns,
                 manager_g_assigns,
             )
 
@@ -239,7 +239,7 @@ class TestFeudalPolicy(unittest.TestCase):
                 pi.state_in[1]: worker_features[1],
                 pi.state_in[2]: manager_features[0],
                 pi.state_in[3]: manager_features[1]
-            }   
+            }
 
             # single step episode where the agent took action 1 and got return 1
             feed_dict_2 = {
@@ -262,7 +262,7 @@ class TestFeudalPolicy(unittest.TestCase):
 
                 # run a train update
                 feed_dict = feed_dict_1 if i % 2 == 0 else feed_dict_2
-                # s_diff needs to be random because the constant cases 
+                # s_diff needs to be random because the constant cases
                 # give poor performance
                 feed_dict[pi.s_diff] = [np.random.randn(g_dim)]
                 outputs_list = [pi.loss, pi.manager_vf, pi.pi, train_op]
@@ -274,7 +274,7 @@ class TestFeudalPolicy(unittest.TestCase):
                     input()
 
             np.testing.assert_array_almost_equal(policy, [[0,1]])
-    
+
 
 if __name__ == '__main__':
     unittest.main()
