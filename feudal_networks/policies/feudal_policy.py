@@ -275,7 +275,7 @@ class FeudalPolicy(policy.Policy):
 
         # worker policy loss
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf), [-1])
-        log_p = tf.reduce_sum(self.log_pi * self.ac)
+        log_p = tf.reduce_sum(self.log_pi * self.ac,[1])
         worker_loss = (self.r + self.config.alpha * self.ri - cutoff_vf_worker) * log_p
         worker_loss = -tf.reduce_sum(worker_loss)
 
