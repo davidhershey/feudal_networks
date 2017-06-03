@@ -24,6 +24,7 @@ class Config(object):
     z_dim = 64
     vf_hidden_size = 128
     eps = 1e-6
+    batch_pad_method = 'same' # tests assume same, but zeros performs better
     
     # manager
     manager_rnn_type = 'lstm'

@@ -2,8 +2,9 @@
 import numpy as np
 from collections import namedtuple
 
-def cosine_similarity(u, v):
-    return np.dot(np.squeeze(u),np.squeeze(v)) / (np.linalg.norm(u) * np.linalg.norm(v))
+def cosine_similarity(u, v, eps=1e-8):
+    return (np.dot(np.squeeze(u), np.squeeze(v)) 
+            / (np.linalg.norm(u) * np.linalg.norm(v) + eps))
 
 Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
     "s_diff", "ri", "gsum", "features"])
@@ -48,21 +49,42 @@ class FeudalBatchProcessor(object):
     This class adapts the batch of PolicyOptimizer to a batch useable by
     the FeudalPolicy.
     """
-    def __init__(self, c):
+    def __init__(self, c, pad_method='zeros'):
         self.c = c
         self.last_terminal = True
+        self.pad_method = pad_method
+
+    def _pad_front(self, batch):
+        if self.pad_method == 'same':
+            self.s = [batch.s[0] for _ in range(self.c)]
+            self.g = [batch.g[0] for _ in range(self.c)]
+        elif self.pad_method == 'zeros': # pad zeros
+            self.s = [np.zeros_like(batch.s[0]) for _ in range(self.c)]
+            self.g = [np.zeros_like(batch.g[0]) for _ in range(self.c)]
+        else:
+            raise ValueError('invalid pad method: {}'.format(self.pad_method))
+
+        # prepend with dummy values so indexing is the same
+        self.obs = [None for _ in range(self.c)]
+        self.a = [None for _ in range(self.c)]
+        self.manager_returns = [None for _ in range(self.c)]
+        self.worker_returns = [None for _ in range(self.c)]
+        self.features = [None for _ in range(self.c)]
+
+    def _pad_back(self, batch):
+        if self.pad_method == 'same':
+            self.s.extend([batch.s[-1] for _ in range(self.c)])
+            self.g.extend([batch.g[-1] for _ in range(self.c)])
+        elif self.pad_method == 'zeros': # pad zeros
+            self.s.extend([np.zeros_like(batch.s[-1]) for _ in range(self.c)])
+            self.g.extend([np.zeros_like(batch.g[-1]) for _ in range(self.c)])
+        else:
+            raise ValueError('invalid pad method: {}'.format(self.pad_method))
 
     def _extend(self, batch):
         if self.last_terminal:
             self.last_terminal = False
-            self.s = [batch.s[0] for _ in range(self.c)]
-            self.g = [batch.g[0] for _ in range(self.c)]
-            # prepend with dummy values so indexing is the same
-            self.obs = [None for _ in range(self.c)]
-            self.a = [None for _ in range(self.c)]
-            self.manager_returns = [None for _ in range(self.c)]
-            self.worker_returns = [None for _ in range(self.c)]
-            self.features = [None for _ in range(self.c)]
+            self._pad_front(batch)
 
         # extend with the actual values
         self.obs.extend(batch.obs)
@@ -76,8 +98,7 @@ class FeudalBatchProcessor(object):
         # if this is a terminal batch, then append the final s and g c times
         # note that both this and the above case can occur at the same time
         if batch.terminal:
-            self.s.extend([batch.s[-1] for _ in range(self.c)])
-            self.g.extend([batch.g[-1] for _ in range(self.c)])
+            self._pad_back(batch)
 
     def process_batch(self, batch):
         """

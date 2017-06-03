@@ -12,7 +12,7 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         # simple case ignoring the fact that the different list have 
         # elements with different types 
         c = 1
-        fbp = FeudalBatchProcessor(c)
+        fbp = FeudalBatchProcessor(c, pad_method='same')
 
         obs = [1,2]
         a = [1,2]
@@ -85,7 +85,7 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         features = [1,2]
         b = Batch(obs, a, m_returns, w_returns, terminal, g, s, features)
         
-        fbp = FeudalBatchProcessor(c)
+        fbp = FeudalBatchProcessor(c, pad_method='same')
         fb = fbp.process_batch(b)
 
         np.testing.assert_array_equal(fb.obs, [])
@@ -137,7 +137,7 @@ class TestFeudalBatchProcessor(unittest.TestCase):
 
     def test_simple_terminal_on_start(self):
         c = 2
-        fbp = FeudalBatchProcessor(c)
+        fbp = FeudalBatchProcessor(c, pad_method='same')
 
         obs = [1,2]
         a = [1,2]
@@ -160,7 +160,7 @@ class TestFeudalBatchProcessor(unittest.TestCase):
 
     def test_intrinsic_reward_and_gsum_calculation(self):
         c = 2
-        fbp = FeudalBatchProcessor(c)
+        fbp = FeudalBatchProcessor(c, pad_method='same')
 
         obs = a = m_returns = w_returns = features = [None, None, None]
         terminal = True

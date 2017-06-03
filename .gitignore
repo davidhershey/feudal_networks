@@ -123,6 +123,7 @@ CTestTestfile.cmake
 # media
 *.pdf
 *.gif
+*.mp4
 
 # snapshots
 *snapshots*

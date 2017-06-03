@@ -24,7 +24,8 @@ class FeudalPolicy(policy.Policy):
         self.config = config
         self.k = config.k # dimensionality of w
         self.g_dim = config.g_dim # dimensionality of goals
-        self.batch_processor = FeudalBatchProcessor(config.c)
+        self.batch_processor = FeudalBatchProcessor(
+            config.c, pad_method=config.batch_pad_method)
         self._build_model()
 
     def _build_model(self):
