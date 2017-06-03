@@ -239,7 +239,7 @@ class PolicyOptimizer(object):
         # recent global weights
         sess.run(self.sync)
         rollout = self.pull_batch_from_queue()
-        batch = process_rollout(rollout, gamma=.99)
+        batch = process_rollout(rollout, gamma=self.config.gamma)
         batch = self.policy.update_batch(batch)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
         should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
@@ -267,10 +267,10 @@ class PolicyOptimizer(object):
             feed_dict[self.policy.state_in[i]] = batch.features[i]
             feed_dict[self.network.state_in[i]] = batch.features[i]
 
-
         fetched = sess.run(fetches, feed_dict=feed_dict)
 
         if should_compute_summary:
-            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]), fetched[-1])
+            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]), 
+                fetched[-1])
             self.summary_writer.flush()
         self.local_steps += 1

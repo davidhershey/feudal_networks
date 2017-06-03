@@ -1,4 +1,5 @@
 
+import numpy as np
 import sys
 import unittest
 import tensorflow as tf
@@ -10,6 +11,12 @@ import test_config
 
 
 class TestLSTMPolicy(unittest.TestCase):
+
+    def setUp(self):
+        # reset graph before each test case
+        tf.set_random_seed(1)
+        np.random.seed(1)
+        tf.reset_default_graph()
 
     def test_init(self):
         global_step = tf.get_variable("global_step", [], tf.int32,\

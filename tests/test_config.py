@@ -17,6 +17,9 @@ class Config(object):
     learning_rate = 1e-4
     discount = .99
 
+    # lstm 
+    size = 64
+
     # feudal
     z_dim = 64
     vf_hidden_size = 128

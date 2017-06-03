@@ -2,8 +2,9 @@
 import numpy as np
 import unittest
 
-from feudal_networks.policies.feudal_batch_processor import FeudalBatchProcessor, FeudalBatch
-from feudal_networks.algos.policy_optimizer import Batch
+from feudal_networks.policies.feudal_batch_processor import FeudalBatchProcessor, FeudalBatch 
+
+from feudal_networks.algos.feudal_policy_optimizer import Batch
 
 class TestFeudalBatchProcessor(unittest.TestCase):
 
@@ -27,7 +28,7 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.returns, [1])
         np.testing.assert_array_equal(fb.s_diff, [1])
         np.testing.assert_array_equal(fb.ri, [0])
-        np.testing.assert_array_equal(fb.gsum, [2])
+        np.testing.assert_array_equal(fb.gsum, [1])
         np.testing.assert_array_equal(fb.features, [1])
 
         obs = [3,4]
@@ -44,8 +45,8 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.returns, [2,3])
         np.testing.assert_array_equal(fb.s_diff, [1,1])
         self.assertEqual(len(fb.ri), 2)
-        np.testing.assert_array_equal(fb.gsum, [3, 5])
-        np.testing.assert_array_equal(fb.features, [2,3])
+        np.testing.assert_array_equal(fb.gsum, [1, 2])
+        np.testing.assert_array_equal(fb.features, [2])
 
         obs = [5]
         a = [5]
@@ -61,8 +62,8 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.returns, [4,5])
         np.testing.assert_array_equal(fb.s_diff, [1,0])
         self.assertEqual(len(fb.ri), 2)
-        np.testing.assert_array_equal(fb.gsum, [7,9])
-        np.testing.assert_array_equal(fb.features, [4,5])
+        np.testing.assert_array_equal(fb.gsum, [3,4])
+        np.testing.assert_array_equal(fb.features, [4])
 
     def test_simple_c_2(self):
         # simple case ignoring the fact that the different list have 
@@ -102,8 +103,8 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.returns, [1,2])
         np.testing.assert_array_equal(fb.s_diff, [2,2])
         self.assertEqual(len(fb.ri), 2)
-        np.testing.assert_array_equal(fb.gsum, [3,4])
-        np.testing.assert_array_equal(fb.features, [1,2])
+        np.testing.assert_array_equal(fb.gsum, [2,2])
+        np.testing.assert_array_equal(fb.features, [1])
 
         obs = [5]
         a = [5]
@@ -119,8 +120,8 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.returns, [3,4,5])
         np.testing.assert_array_equal(fb.s_diff, [2,1,0])
         self.assertEqual(len(fb.ri), 3)
-        np.testing.assert_array_equal(fb.gsum, [6,9,12])
-        np.testing.assert_array_equal(fb.features, [3,4,5])
+        np.testing.assert_array_equal(fb.gsum, [3,5,7])
+        np.testing.assert_array_equal(fb.features, [3])
 
     def test_simple_terminal_on_start(self):
         c = 2
@@ -140,8 +141,8 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.returns, [1,2])
         np.testing.assert_array_equal(fb.s_diff, [1,0])
         self.assertEqual(len(fb.ri), 2)
-        np.testing.assert_array_equal(fb.gsum, [3,4])
-        np.testing.assert_array_equal(fb.features, [1,2])
+        np.testing.assert_array_equal(fb.gsum, [2,2])
+        np.testing.assert_array_equal(fb.features, [1])
 
     def test_intrinsic_reward_and_gsum_calculation(self):
         c = 2
@@ -156,7 +157,7 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         last_ri = (1. + 1. / np.sqrt(2)) / 2
         np.testing.assert_array_almost_equal(fb.ri, [0,0,last_ri])
         np.testing.assert_array_equal(fb.gsum, 
-            [np.array([3,3]), np.array([4,4]), np.array([6,6])])
+            [np.array([2,2]), np.array([2,2]), np.array([3,3])])
 
 if __name__ == '__main__':
     unittest.main()

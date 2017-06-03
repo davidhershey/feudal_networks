@@ -24,7 +24,7 @@ class FeudalBatch(object):
         self.s_diff += [s_diff]
         self.ri += [ri]
         self.gsum += [gsum]
-        if not self.features:
+        if self.features is None:
             self.features = features
 
     def get_batch(self):
@@ -35,8 +35,6 @@ class FeudalBatch(object):
         batch_ri = np.asarray(self.ri)
         batch_gs = np.asarray(self.gsum)
         return Batch(batch_obs,batch_a,batch_r,batch_sd,batch_ri,batch_gs,self.features)
-
-
 
 class FeudalBatchProcessor(object):
     """

@@ -128,7 +128,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
         for local_step_iter in range(num_local_steps):
             # print last_c_g.shape
             fetched = policy.act(last_state,last_c_g, *last_features)
-            action, value_, g,s,last_c_g,features = fetched[0], fetched[1], \
+            action, value_, g, s, last_c_g, features = fetched[0], fetched[1], \
                                                     fetched[2], fetched[3], \
                                                     fetched[4], fetched[5:]
             action_to_take = action.argmax()

@@ -6,3 +6,4 @@ class Config(object):
     beta_end = .001
     decay_steps = 50000000
     summary_steps = 10
+    gamma = .99
