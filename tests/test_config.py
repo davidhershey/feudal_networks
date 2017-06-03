@@ -7,6 +7,7 @@ loaded, and that particular value should be overwritten.
 class Config(object):
     # common 
     verbose = True
+    testing = True
     n_percept_hidden_layer = 4
     n_percept_filters = 32
     beta_start = .01
@@ -14,6 +15,7 @@ class Config(object):
     decay_steps = 50000000
     summary_steps = 10
     num_local_steps = 40
+    global_norm_clip = 40
 
     # lstm 
     size = 64

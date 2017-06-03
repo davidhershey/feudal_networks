@@ -35,7 +35,9 @@ class FeudalBatch(object):
         batch_a = np.asarray(self.a)
         batch_manager_returns = np.asarray(self.manager_returns)
         batch_worker_returns = np.asarray(self.worker_returns)
-        batch_sd = np.squeeze(np.asarray(self.s_diff))
+        batch_sd = np.asarray(self.s_diff)
+        if len(batch_sd.shape) >= 2 and batch_sd.shape[1] == 1:
+            batch_sd = np.squeeze(batch_sd, axis=1)
         batch_ri = np.asarray(self.ri)
         batch_gs = np.asarray(self.gsum)
         return Batch(batch_obs, batch_a, batch_manager_returns, 

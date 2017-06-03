@@ -5,9 +5,10 @@ import sys
 import tensorflow as tf
 import unittest
 
+from feudal_networks.policies.feudal_policy import FeudalPolicy
+
 sys.path.append('..')
 
-from feudal_networks.policies.feudal_policy import FeudalPolicy
 import test_config
 
 
@@ -33,7 +34,9 @@ class TestFeudalPolicy(unittest.TestCase):
             config = test_config.Config()
             obs_space = (80,80,3)
             act_space = 2
+            config.manager_rnn_type = 'dilated'
             config.g_dim = g_dim = 16
+            config.c = 1
             config.manager_lstm_size = 16
             config.worker_lstm_size = 16
             config.k = 16

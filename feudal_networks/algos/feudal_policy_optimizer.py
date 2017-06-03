@@ -181,8 +181,16 @@ class FeudalPolicyOptimizer(object):
         self.task = task
         self.config = config
 
-        worker_device = "/job:worker/task:{}/cpu:0".format(task)
-        with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
+        # when testing only on localhost, use simple worker device
+        if config.testing:
+            worker_device = "/job:localhost/replica:0/task:0/cpu:0"
+            global_device = worker_device
+        else:
+            worker_device = "/job:worker/task:{}/cpu:0".format(task)
+            global_device = tf.train.replica_device_setter(
+                1, worker_device=worker_device)
+
+        with tf.device(global_device):
             with tf.variable_scope("global"):
                 self.global_step = tf.get_variable("global_step", [], tf.int32, 
                     initializer=tf.constant_initializer(0, dtype=tf.int32),
@@ -226,10 +234,10 @@ class FeudalPolicyOptimizer(object):
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
 
             # build train op
-            worker_opt = tf.train.AdamOptimizer(self.config.worker_learning_rate)
-            worker_train_op = worker_opt.apply_gradients(worker_grads_and_vars)
             manager_opt = tf.train.AdamOptimizer(self.config.manager_learning_rate)
             manager_train_op = manager_opt.apply_gradients(manager_grads_and_vars)
+            worker_opt = tf.train.AdamOptimizer(self.config.worker_learning_rate)
+            worker_train_op = worker_opt.apply_gradients(worker_grads_and_vars)
             self.train_op = tf.group(worker_train_op, manager_train_op, inc_step)
             self.summary_writer = None
             self.local_steps = 0
@@ -279,8 +287,7 @@ class FeudalPolicyOptimizer(object):
             manager_gamma=self.config.manager_discount,
             worker_gamma=self.config.worker_discount)
         batch = self.policy.update_batch(batch)
-        compute_summary = self.task == 0 and self.local_steps % 11 == 0
-        # should_compute_summary = True
+
         should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
 
         if should_compute_summary:

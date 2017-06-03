@@ -147,10 +147,6 @@ class FeudalPolicy(policy.Policy):
 
             self.manager_vf = self._build_value(g_hat)
 
-            if self.config.verbose:
-                self.manager_vf = tf.Print(self.manager_vf, [self.manager_vf],
-                    message='\nmanager vf: ', summarize=5)
-
             # add manager c, h to state in and out
             self.state_in = [
                 self.manager_state_in[0],

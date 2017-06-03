@@ -8,6 +8,7 @@ class Config(object):
     decay_steps = 20000000
     summary_steps = 10
     num_local_steps = 20
+    testing = False
     
     # feudal
     z_dim = 256
