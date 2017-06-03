@@ -122,4 +122,4 @@ class VisionMazeEnv(gym.Env):
         return nx
 
     def _render(self, mode='human', close=False):
-        return 
+        return self._get_obs()

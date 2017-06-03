@@ -81,7 +81,7 @@ class FeudalPolicy(policy.Policy):
             # Calculate manager internal state
             self.s = tf.layers.dense(
                 inputs=self.z,
-                units=self.g_dim,
+                units=self.config.s_dim,
                 activation=tf.nn.elu,
                 name='manager_s'
             )
@@ -95,20 +95,27 @@ class FeudalPolicy(policy.Policy):
             if self.config.manager_rnn_type == 'dilated':
                 self.manager_state_in = [
                     tf.placeholder(
-                        shape=(1, self.g_dim), 
+                        shape=(1, self.config.manager_lstm_size), 
                         dtype='float32',
                         name='manger_lstm_in1'),
                     tf.placeholder(
-                        shape=(1, self.g_dim), 
+                        shape=(1, self.config.manager_lstm_size), 
                         dtype='float32',
                         name='manger_lstm_in2')
                 ]
                 g_hat, self.manager_state_init, self.manager_state_out = DilatedLSTM(
-                    x, self.g_dim, self.manager_state_in, chunks=self.config.c)
+                    x, 
+                    self.config.manager_lstm_size, 
+                    self.manager_state_in, 
+                    chunks=self.config.c
+                )
 
             elif self.config.manager_rnn_type == 'lstm':
                 self.manager_lstm = SingleStepLSTM(
-                    x, self.g_dim, step_size=tf.shape(self.obs)[:1])
+                    x, 
+                    self.config.manager_lstm_size, 
+                    step_size=tf.shape(self.obs)[:1]
+                )
                 self.manager_state_in = self.manager_lstm.state_in
                 self.manager_state_out = self.manager_lstm.state_out
                 self.manager_state_init = self.manager_lstm.state_init
@@ -303,12 +310,13 @@ class FeudalPolicy(policy.Policy):
         tf.summary.scalar("model/beta", beta)
         tf.summary.image("model/obs", self.obs)
 
-
         # additional summaries
         tf.summary.image("model/summed_obs", 
             tf.reduce_mean(self.obs, axis=0, keep_dims=True))
-        tf.summary.image("model/goal_mul_s_diff", tf.reshape(
-            tf.multiply(self.s_diff, self.g), (-1, 16, 16, 1)))
+        if np.sqrt(self.config.g_dim) == int(np.sqrt(self.config.g_dim)):
+            side_length = int(np.sqrt(self.config.g_dim))
+            tf.summary.image("model/goal_mul_s_diff", tf.reshape(
+                tf.multiply(self.s_diff, self.g), (-1, side_length, side_length, 1)))
         tf.summary.scalar("model/intrinsic_reward", tf.reduce_mean(
             self.config.alpha * self.ri))
         tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))

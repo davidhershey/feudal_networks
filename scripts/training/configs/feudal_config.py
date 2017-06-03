@@ -14,16 +14,18 @@ class Config(object):
 
     # feudal
     z_dim = 128
-    vf_hidden_size = 128
+    vf_hidden_size = 64
     eps = 1e-8
 
     # manager
     manager_rnn_type = 'lstm'
-    g_dim = 256 # s_dim, manager_lstm_size must be this as well
+    s_dim = 64
+    manager_lstm_size = 64
+    g_dim = 64
     c = 5 # manager timesteps
 
     # worker
-    # constrained to match g_dim because of the way features are stored
-    worker_lstm_size = g_dim 
+    # constrained to match manager_lstm_size because of the way features are stored
+    worker_lstm_size = manager_lstm_size
     k = 16 # dimensionality of w
     alpha = .6

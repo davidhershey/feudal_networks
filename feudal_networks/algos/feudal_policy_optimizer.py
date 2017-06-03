@@ -235,6 +235,8 @@ class FeudalPolicyOptimizer(object):
             tf.summary.scalar("model/manager_grad_global_norm", tf.global_norm(
                 manager_grads))
 
+            self.summary_op = tf.summary.merge_all()
+
     def start(self, sess, summary_writer):
         self.runner.start_runner(sess, summary_writer)
         self.summary_writer = summary_writer
@@ -270,7 +272,8 @@ class FeudalPolicyOptimizer(object):
         should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
 
         if should_compute_summary:
-            fetches = [self.policy.summary_op, self.train_op, self.global_step]
+            fetches = [self.summary_op, self.policy.summary_op, self.train_op, 
+                self.global_step]
         else:
             fetches = [self.train_op, self.global_step]
 
@@ -298,10 +301,14 @@ class FeudalPolicyOptimizer(object):
             feed_dict[self.policy.state_in[i]] = batch.features[i]
             feed_dict[self.network.state_in[i]] = batch.features[i]
 
-
         fetched = sess.run(fetches, feed_dict=feed_dict)
 
         if should_compute_summary:
-            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]), fetched[-1])
+            self.summary_writer.add_summary(
+                tf.Summary.FromString(fetched[0]),
+                fetched[-1])
+            self.summary_writer.add_summary(
+                tf.Summary.FromString(fetched[1]),
+                fetched[-1])
             self.summary_writer.flush()
         self.local_steps += 1
