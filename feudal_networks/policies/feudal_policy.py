@@ -45,9 +45,12 @@ class FeudalPolicy(policy.Policy):
         self.obs = tf.placeholder(tf.float32, 
             shape=[None] + list(self.obs_space),
             name='obs')
-        self.r = tf.placeholder(tf.float32,
+        self.manager_r = tf.placeholder(tf.float32,
             shape=(None,),
-            name='returns')
+            name='manager_returns')
+        self.worker_r = tf.placeholder(tf.float32,
+            shape=(None,),
+            name='worker_returns')
         self.ac = tf.placeholder(tf.float32,
             shape=(None,self.act_space),
             name='action_mask')
@@ -267,33 +270,39 @@ class FeudalPolicy(policy.Policy):
             dcos = tf.Print(dcos, [dcos, dot, mag], 
                 message='\nfeudal loss dcos, dot, magnitude: ', summarize=15)
             cutoff_vf_manager = tf.Print(cutoff_vf_manager, 
-                [self.r, cutoff_vf_manager], 
+                [self.manager_r, cutoff_vf_manager], 
                 message='\nfeudal loss return, manager vf: ', summarize=10)
 
-        manager_loss = -tf.reduce_sum((self.r - cutoff_vf_manager) * dcos)
+        manager_loss = -tf.reduce_sum((self.manager_r - cutoff_vf_manager) * dcos)
 
         # manager value loss
-        Am = self.r - self.manager_vf
+        Am = self.manager_r - self.manager_vf
         manager_vf_loss = .5 * tf.reduce_sum(tf.square(Am))
 
         # worker policy loss
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf), [-1])
         log_p = tf.reduce_sum(self.log_pi * self.ac, axis=1)
-        # log_p = tf.reduce_sum(self.log_pi * self.ac)
 
         if self.config.verbose:
             log_p = tf.Print(log_p, [self.ac], 
                 message='\naction mask: ', summarize=10)
 
-        worker_loss = (self.r + self.config.alpha * self.ri - cutoff_vf_worker) * log_p
+        alpha = tf.train.polynomial_decay(
+            self.config.alpha_start, 
+            self.global_step,
+            end_learning_rate=self.config.alpha_end,
+            decay_steps=self.config.alpha_steps,
+            power=1
+        )
+
+        worker_loss = (self.worker_r + alpha * self.ri - cutoff_vf_worker) * log_p
         worker_loss = -tf.reduce_sum(worker_loss)
 
         # worker value loss
-        Aw = (self.r + self.config.alpha * self.ri) - self.worker_vf
+        Aw = (self.worker_r + alpha * self.ri) - self.worker_vf
         worker_vf_loss = .5 * tf.reduce_sum(tf.square(Aw))
 
         entropy = -tf.reduce_sum(self.pi * self.log_pi)
-
         beta = tf.train.polynomial_decay(
             self.config.beta_start, 
             self.global_step,
@@ -318,6 +327,7 @@ class FeudalPolicy(policy.Policy):
                 tf.GraphKeys.TRAINABLE_VARIABLES, 
                 tf.get_variable_scope().name)))
         tf.summary.scalar("model/beta", beta)
+        tf.summary.scalar("model/alpha", alpha)
         tf.summary.image("model/obs", self.obs, max_outputs=1)
 
         # additional summaries
@@ -332,11 +342,11 @@ class FeudalPolicy(policy.Policy):
             tf.summary.image("model/goal_mul_s_diff", tf.reshape(
                 tf.multiply(self.s_diff, self.g), (-1, side_length, side_length, 1)),
                 max_outputs=1)
-        tf.summary.scalar("model/intrinsic_reward", tf.reduce_mean(
-            self.config.alpha * self.ri))
+        tf.summary.scalar("model/intrinsic_reward", tf.reduce_mean(alpha * self.ri))
         tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))
         tf.summary.scalar("model/dcos_magnitude", tf.reduce_mean(mag))
-        tf.summary.scalar("model/return", tf.reduce_mean(self.r))
+        tf.summary.scalar("model/manager_return", tf.reduce_mean(self.manager_r))
+        tf.summary.scalar("model/worker_return", tf.reduce_mean(self.worker_r))
 
         self.summary_op = tf.summary.merge_all()
 
@@ -352,10 +362,11 @@ class FeudalPolicy(policy.Policy):
 
     def value(self, ob, g, cw, hw, cm, hm):
         sess = tf.get_default_session()
-        return sess.run(self.manager_vf,
+        manager_vf, worker_vf = sess.run([self.manager_vf, self.worker_vf],
                         {self.obs: [ob], self.state_in[0]: cw, self.state_in[1]: hw,\
                          self.state_in[2]: cm, self.state_in[3]: hm,\
-                         self.prev_g: g})[0]
+                         self.prev_g: g})
+        return manager_vf[0], worker_vf[0]
 
     def update_batch(self, batch):
         return self.batch_processor.process_batch(batch)

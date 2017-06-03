@@ -1,9 +1,13 @@
 
+import cv2
 import gym
 from gym import spaces
 import numpy as np
 
 class VisionMazeEnv(gym.Env):
+    metadata = {
+        'render.modes': ['rgb_array'],
+    }
     def __init__(self, room_length=3, num_rooms_per_side=2):
         assert room_length % 2 == 1, "room_length must be odd"
         assert room_length >= 3, "room_length must be greater than 3"
@@ -55,7 +59,7 @@ class VisionMazeEnv(gym.Env):
             r, done = self.goal_reward, True
             
         self.state = np.array([x, y])
-        return self._get_obs(), r, done, {}
+        return self._get_obs(), r, done, {'reward': r}
 
     def _step_up(self, x, y):
         ny = y + 1
@@ -121,5 +125,15 @@ class VisionMazeEnv(gym.Env):
         nx = max(0, nx)
         return nx
 
-    def _render(self, mode='human', close=False):
-        return self._get_obs()
+    def _render(self, mode='rgb_array', close=False):
+        frame = np.repeat(self._get_obs(), 3, axis=-1)
+        color = np.array([205,50,50]) / 255
+        frame[self.goal_state[0], self.goal_state[1], :] = color
+        frame *= 255
+        frame -= 255
+        frame *= -1
+        s = self.room_length * self.num_rooms_per_side
+        for _ in range(4):
+            s *= 2
+            frame = cv2.resize(frame, (s, s))
+        return np.flip(frame.astype(np.uint8), axis=0)

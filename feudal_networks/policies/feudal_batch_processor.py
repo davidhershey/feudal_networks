@@ -5,22 +5,25 @@ from collections import namedtuple
 def cosine_similarity(u, v):
     return np.dot(np.squeeze(u),np.squeeze(v)) / (np.linalg.norm(u) * np.linalg.norm(v))
 
-Batch = namedtuple("Batch", ["obs", "a", "returns", "s_diff", "ri", "gsum", "features"])
+Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
+    "s_diff", "ri", "gsum", "features"])
 
 class FeudalBatch(object):
     def __init__(self):
         self.obs = []
         self.a = []
-        self.returns = []
+        self.manager_returns = []
+        self.worker_returns = []
         self.s_diff = []
         self.ri = []
         self.gsum = []
         self.features = None
 
-    def add(self, obs, a, returns, s_diff, ri, gsum, features):
+    def add(self, obs, a, manager_returns, worker_returns, s_diff, ri, gsum, features):
         self.obs += [obs]
         self.a += [a]
-        self.returns += [returns]
+        self.manager_returns += [manager_returns]
+        self.worker_returns += [worker_returns]
         self.s_diff += [s_diff]
         self.ri += [ri]
         self.gsum += [gsum]
@@ -30,11 +33,13 @@ class FeudalBatch(object):
     def get_batch(self):
         batch_obs = np.asarray(self.obs)
         batch_a = np.asarray(self.a)
-        batch_r = np.asarray(self.returns)
+        batch_manager_returns = np.asarray(self.manager_returns)
+        batch_worker_returns = np.asarray(self.worker_returns)
         batch_sd = np.squeeze(np.asarray(self.s_diff))
         batch_ri = np.asarray(self.ri)
         batch_gs = np.asarray(self.gsum)
-        return Batch(batch_obs,batch_a,batch_r,batch_sd,batch_ri,batch_gs,self.features)
+        return Batch(batch_obs, batch_a, batch_manager_returns, 
+            batch_worker_returns, batch_sd, batch_ri, batch_gs, self.features)
 
 class FeudalBatchProcessor(object):
     """
@@ -53,13 +58,15 @@ class FeudalBatchProcessor(object):
             # prepend with dummy values so indexing is the same
             self.obs = [None for _ in range(self.c)]
             self.a = [None for _ in range(self.c)]
-            self.returns = [None for _ in range(self.c)]
+            self.manager_returns = [None for _ in range(self.c)]
+            self.worker_returns = [None for _ in range(self.c)]
             self.features = [None for _ in range(self.c)]
 
         # extend with the actual values
         self.obs.extend(batch.obs)
         self.a.extend(batch.a)
-        self.returns.extend(batch.returns)
+        self.manager_returns.extend(batch.manager_returns)
+        self.worker_returns.extend(batch.worker_returns)
         self.s.extend(batch.s)
         self.g.extend(batch.g)
         self.features.extend(batch.features)
@@ -116,8 +123,8 @@ class FeudalBatchProcessor(object):
                 gsum += self.g[i]
 
             # add to the batch
-            feudal_batch.add(self.obs[t], self.a[t], self.returns[t], s_diff,
-                ri, gsum, self.features[t])
+            feudal_batch.add(self.obs[t], self.a[t], self.manager_returns[t], 
+                self.worker_returns[t], s_diff, ri, gsum, self.features[t])
 
         # in the terminal case, set reset flag
         if batch.terminal:
@@ -129,7 +136,8 @@ class FeudalBatchProcessor(object):
             twoc = 2 * self.c
             self.obs = self.obs[-twoc:]
             self.a = self.a[-twoc:]
-            self.returns = self.returns[-twoc:]
+            self.manager_returns = self.manager_returns[-twoc:]
+            self.worker_returns = self.worker_returns[-twoc:]
             self.s = self.s[-twoc:]
             self.g = self.g[-twoc:]
             self.features = self.features[-twoc:]

@@ -3,6 +3,7 @@ from gym.spaces.box import Box
 import numpy as np
 import gym
 from gym import spaces
+from gym import wrappers
 import logging
 import universe
 from universe import vectorized
@@ -33,6 +34,7 @@ def create_env(env_id, client_id, remotes, **kwargs):
 
 def create_feudal_env(env_id, client_id, remotes, **_):
     env = gym.make(env_id)
+    env = wrappers.Monitor(env, directory='videos/{}'.format(env_id), force=True)
     return env
 
 def create_flash_env(env_id, client_id, remotes, **_):

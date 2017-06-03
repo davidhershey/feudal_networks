@@ -54,7 +54,8 @@ class TestFeudalPolicy(unittest.TestCase):
             feed_dict_1 = {
                 pi.obs: obs,
                 pi.ac: [[1, 0]],
-                pi.r: [0],
+                pi.manager_r: [0],
+                pi.worker_r: [0],
                 pi.s_diff: s_diff,
                 pi.prev_g: prev_g,
                 pi.ri: [0],
@@ -68,7 +69,8 @@ class TestFeudalPolicy(unittest.TestCase):
             feed_dict_2 = {
                 pi.obs: obs,
                 pi.ac: [[0, 1]],
-                pi.r: [1],
+                pi.manager_r: [1],
+                pi.worker_r: [1],
                 pi.s_diff: s_diff,
                 pi.prev_g: prev_g,
                 pi.ri: [0],
@@ -90,6 +92,7 @@ class TestFeudalPolicy(unittest.TestCase):
                 if verbose:
                     print('loss: {}\npolicy: {}\nvalue: {}\n-------'.format(
                         loss, policy, vf))
+                    input()
             np.testing.assert_array_almost_equal(policy, [[0,1]])
             self.assertTrue(vf > .4 and vf < .6)
 
@@ -145,7 +148,8 @@ class TestFeudalPolicy(unittest.TestCase):
             feed_dict_1 = {
                 pi.obs: obs,
                 pi.ac: [[1, 0]],
-                pi.r: [0],
+                pi.manager_r: [0],
+                pi.worker_r: [0],
                 pi.prev_g: prev_g,
                 pi.ri: [0],
                 pi.state_in[0]: worker_features[0],
@@ -158,7 +162,8 @@ class TestFeudalPolicy(unittest.TestCase):
             feed_dict_2 = {
                 pi.obs: obs,
                 pi.ac: [[0, 1]],
-                pi.r: [1],
+                pi.manager_r: [1],
+                pi.worker_r: [1],
                 pi.prev_g: prev_g,
                 pi.ri: [0],
                 pi.state_in[0]: worker_features[0],
@@ -238,7 +243,8 @@ class TestFeudalPolicy(unittest.TestCase):
             feed_dict_1 = {
                 pi.obs: obs,
                 pi.ac: [[1, 0]],
-                pi.r: [0],
+                pi.manager_r: [0],
+                pi.worker_r: [0],
                 pi.prev_g: prev_g,
                 pi.ri: [0],
                 pi.state_in[0]: worker_features[0],
@@ -251,7 +257,8 @@ class TestFeudalPolicy(unittest.TestCase):
             feed_dict_2 = {
                 pi.obs: obs,
                 pi.ac: [[0, 1]],
-                pi.r: [1],
+                pi.manager_r: [1],
+                pi.worker_r: [1],
                 pi.prev_g: prev_g,
                 pi.ri: [0],
                 pi.state_in[0]: worker_features[0],

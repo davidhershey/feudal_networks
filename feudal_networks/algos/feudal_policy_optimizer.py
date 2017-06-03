@@ -15,7 +15,7 @@ from feudal_networks.policies.feudal_policy import FeudalPolicy
 def discount(x, gamma):
     return scipy.signal.lfilter([1], [1, -gamma], x[::-1], axis=0)[::-1]
 
-def process_rollout(rollout, gamma, lambda_=1.0):
+def process_rollout(rollout, manager_gamma, worker_gamma, lambda_=1.0):
     """
 given a rollout, compute its returns and the advantage
 """
@@ -23,16 +23,19 @@ given a rollout, compute its returns and the advantage
     batch_a = np.asarray(rollout.actions)
 
     rewards = np.asarray(rollout.rewards)
-    vpred_t = np.asarray(rollout.values + [rollout.r])
-    rewards_plus_v = np.asarray(rollout.rewards + [rollout.r])
-    batch_r = discount(rewards_plus_v, gamma)[:-1]
+    manager_rewards_plus_v = np.asarray(rollout.rewards + [rollout.manager_r])
+    worker_rewards_plus_v = np.asarray(rollout.rewards + [rollout.worker_r])
+    batch_manager_r = discount(manager_rewards_plus_v, manager_gamma)[:-1]
+    batch_worker_r = discount(worker_rewards_plus_v, worker_gamma)[:-1]
 
     batch_s = np.asarray(rollout.ss)
     batch_g = np.asarray(rollout.gs)
     features = rollout.features
-    return Batch(batch_si, batch_a, batch_r, rollout.terminal,batch_s,batch_g, features)
+    return Batch(batch_si, batch_a, batch_manager_r, batch_worker_r, 
+        rollout.terminal, batch_s, batch_g, features)
 
-Batch = namedtuple("Batch", ["obs", "a", "returns", "terminal", "s", "g", "features"])
+Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns", 
+    "terminal", "s", "g", "features"])
 
 class PartialRollout(object):
     """
@@ -47,7 +50,8 @@ class PartialRollout(object):
         self.ss = []
         self.gs = []
         self.features = []
-        self.r = 0.0
+        self.manager_r = 0.0
+        self.worker_r = 0.0
         self.terminal = False
 
     def add(self, state, action, reward, value,g,s, terminal, features):
@@ -68,7 +72,8 @@ class PartialRollout(object):
         self.values.extend(other.values)
         self.gs.extend(other.gs)
         self.ss.extend(other.ss)
-        self.r = other.r
+        self.manager_r = other.manager_r
+        self.worker_r = other.worker_r
         self.terminal = other.terminal
         self.features.extend(other.features)
 
@@ -164,7 +169,8 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 break
 
         if not terminal_end:
-            rollout.r = policy.value(last_state, last_c_g, *last_features)
+            rollout.manager_r, rollout.worker_r = policy.value(
+                last_state, last_c_g, *last_features)
 
         # once we have enough experience, yield it, and have the ThreadRunner place it on a queue
         yield rollout
@@ -203,20 +209,28 @@ class FeudalPolicyOptimizer(object):
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)
-            grads, _ = tf.clip_by_global_norm(grads, 50)
+            grads, _ = tf.clip_by_global_norm(grads, self.config.global_norm_clip)
 
             # build sync
             # copy weights from the parameter server to the local model
             self.sync = tf.group(*[v1.assign(v2)
                 for v1, v2 in zip(pi.var_list, self.network.var_list)])
-            grads_and_vars = list(zip(grads, self.network.var_list))
-            # for g,v in grads_and_vars:
-            #     print g.name,v.name
+
+            manager_grads_and_vars = [(g,v) 
+                for (g,v) in zip(grads, self.network.var_list) 
+                if 'manager' in v.name]
+            worker_grads_and_vars = [(g,v) 
+                for (g,v) in zip(grads, self.network.var_list) 
+                if 'worker' in v.name]
+
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
 
             # build train op
-            opt = tf.train.AdamOptimizer(self.config.learning_rate)
-            self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
+            worker_opt = tf.train.AdamOptimizer(self.config.worker_learning_rate)
+            worker_train_op = worker_opt.apply_gradients(worker_grads_and_vars)
+            manager_opt = tf.train.AdamOptimizer(self.config.manager_learning_rate)
+            manager_train_op = manager_opt.apply_gradients(manager_grads_and_vars)
+            self.train_op = tf.group(worker_train_op, manager_train_op, inc_step)
             self.summary_writer = None
             self.local_steps = 0
 
@@ -261,7 +275,9 @@ class FeudalPolicyOptimizer(object):
         # recent global weights
         sess.run(self.sync)
         rollout = self.pull_batch_from_queue()
-        batch = process_rollout(rollout, gamma=self.config.discount)
+        batch = process_rollout(rollout, 
+            manager_gamma=self.config.manager_discount,
+            worker_gamma=self.config.worker_discount)
         batch = self.policy.update_batch(batch)
         compute_summary = self.task == 0 and self.local_steps % 11 == 0
         # should_compute_summary = True
@@ -280,8 +296,11 @@ class FeudalPolicyOptimizer(object):
             self.policy.ac: batch.a,
             self.network.ac: batch.a,
 
-            self.policy.r: batch.returns,
-            self.network.r: batch.returns,
+            self.policy.manager_r: batch.manager_returns,
+            self.network.manager_r: batch.manager_returns,
+
+            self.policy.worker_r: batch.worker_returns,
+            self.network.worker_r: batch.worker_returns,
 
             self.policy.s_diff: batch.s_diff,
             self.network.s_diff: batch.s_diff,

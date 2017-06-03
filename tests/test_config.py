@@ -14,8 +14,6 @@ class Config(object):
     decay_steps = 50000000
     summary_steps = 10
     num_local_steps = 40
-    learning_rate = 1e-4
-    discount = .99
 
     # lstm 
     size = 64
@@ -25,7 +23,6 @@ class Config(object):
     vf_hidden_size = 128
     eps = 1e-6
     
-
     # manager
     manager_rnn_type = 'lstm'
     s_dim = 64
@@ -33,9 +30,15 @@ class Config(object):
     g_dim = 64 # s_dim, manager_lstm_size must be this as well
     c = 5 # manager timesteps
     s_is_obs = False # skips precept and z, used for visualization mainly
+    manager_learning_rate = 1e-4
+    manager_discount = .99
     
     # worker
     # constrained to match g_dim because of the way features are stored
     worker_lstm_size = g_dim 
     k = 16 # dimensionality of w
-    alpha = .6
+    worker_learning_rate = 1e-4
+    worker_discount = .99
+    alpha_start = .5
+    alpha_end = .5
+    alpha_steps = decay_steps / 20
