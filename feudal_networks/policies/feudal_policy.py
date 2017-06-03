@@ -79,12 +79,15 @@ class FeudalPolicy(policy.Policy):
     def _build_manager(self):
         with tf.variable_scope('manager'):
             # Calculate manager internal state
-            self.s = tf.layers.dense(
-                inputs=self.z,
-                units=self.config.s_dim,
-                activation=tf.nn.elu,
-                name='manager_s'
-            )
+            if self.config.s_is_obs:
+                self.s = policy_utils.flatten(self.obs)
+            else:
+                self.s = tf.layers.dense(
+                    inputs=self.z,
+                    units=self.config.s_dim,
+                    activation=tf.nn.elu,
+                    name='manager_s'
+                )
 
             # Calculate manager output g
             x = tf.expand_dims(self.s, [0])
@@ -252,6 +255,7 @@ class FeudalPolicy(policy.Policy):
             return vf
 
     def _build_loss(self):
+
         # manager policy loss
         cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
         dot = tf.reduce_sum(tf.multiply(self.s_diff, self.g), axis=1)
@@ -274,7 +278,13 @@ class FeudalPolicy(policy.Policy):
 
         # worker policy loss
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf), [-1])
-        log_p = tf.reduce_sum(self.log_pi * self.ac)
+        log_p = tf.reduce_sum(self.log_pi * self.ac, axis=1)
+        # log_p = tf.reduce_sum(self.log_pi * self.ac)
+
+        if self.config.verbose:
+            log_p = tf.Print(log_p, [self.ac], 
+                message='\naction mask: ', summarize=10)
+
         worker_loss = (self.r + self.config.alpha * self.ri - cutoff_vf_worker) * log_p
         worker_loss = -tf.reduce_sum(worker_loss)
 
@@ -308,15 +318,20 @@ class FeudalPolicy(policy.Policy):
                 tf.GraphKeys.TRAINABLE_VARIABLES, 
                 tf.get_variable_scope().name)))
         tf.summary.scalar("model/beta", beta)
-        tf.summary.image("model/obs", self.obs)
+        tf.summary.image("model/obs", self.obs, max_outputs=1)
 
         # additional summaries
         tf.summary.image("model/summed_obs", 
             tf.reduce_mean(self.obs, axis=0, keep_dims=True))
         if np.sqrt(self.config.g_dim) == int(np.sqrt(self.config.g_dim)):
             side_length = int(np.sqrt(self.config.g_dim))
+            tf.summary.image("model/goal", tf.reshape(
+                self.g, (-1, side_length, side_length, 1)), max_outputs=1)
+            tf.summary.image("model/s_diff", tf.reshape(
+                self.s_diff, (-1, side_length, side_length, 1)), max_outputs=1)
             tf.summary.image("model/goal_mul_s_diff", tf.reshape(
-                tf.multiply(self.s_diff, self.g), (-1, side_length, side_length, 1)))
+                tf.multiply(self.s_diff, self.g), (-1, side_length, side_length, 1)),
+                max_outputs=1)
         tf.summary.scalar("model/intrinsic_reward", tf.reduce_mean(
             self.config.alpha * self.ri))
         tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))

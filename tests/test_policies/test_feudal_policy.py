@@ -33,9 +33,11 @@ class TestFeudalPolicy(unittest.TestCase):
             config = test_config.Config()
             obs_space = (80,80,3)
             act_space = 2
-            config.learning_rate = 1e-4
-            g_dim = 256
-            worker_hid_dim = 32
+            config.g_dim = g_dim = 16
+            config.manager_lstm_size = 16
+            config.worker_lstm_size = 16
+            config.k = 16
+            config.learning_rate = 1e-3
             pi = FeudalPolicy(obs_space, act_space, global_step, config)
             train_op = tf.train.AdamOptimizer(config.learning_rate).minimize(pi.loss)
             session.run(tf.global_variables_initializer())
@@ -76,7 +78,7 @@ class TestFeudalPolicy(unittest.TestCase):
                 pi.state_in[3]: manager_features[1]
             }
 
-            n_updates = 200
+            n_updates = 300
             verbose = False
             policy = [0,0]
             vf = 0
@@ -97,11 +99,13 @@ class TestFeudalPolicy(unittest.TestCase):
                     initializer=tf.constant_initializer(0, dtype=tf.int32),
                     trainable=False)
             config = test_config.Config()
-            config.g_dim = 2
-            config.k = 2
             obs_space = (80,80,3)
             act_space = 2
             lr = 5e-3
+            config.g_dim = g_dim = 16
+            config.manager_lstm_size = 16
+            config.worker_lstm_size = 16
+            config.k = 16
             g_dim = config.g_dim
             config.worker_lstm_size = config.g_dim
             pi = FeudalPolicy(obs_space, act_space, global_step, config)
@@ -191,6 +195,8 @@ class TestFeudalPolicy(unittest.TestCase):
                     trainable=False)
             config = test_config.Config()
             config.g_dim = 2
+            config.manager_lstm_size = 2
+            config.worker_lstm_size = 2
             config.k = 2
             obs_space = (80,80,3)
             act_space = 2

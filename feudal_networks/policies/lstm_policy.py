@@ -78,6 +78,7 @@ class LSTMPolicy(object):
         tf.summary.scalar("model/var_global_norm", tf.global_norm(self.var_list))
         tf.summary.scalar("model/beta", beta)
         tf.summary.image("model/obs", self.obs)
+        tf.summary.scalar("model/return", tf.reduce_mean(self.r))
 
         # additional summaries
         tf.summary.image("model/summed_obs", 

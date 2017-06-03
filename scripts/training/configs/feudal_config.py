@@ -1,15 +1,14 @@
 class Config(object):
     # common 
     verbose = False
-    size = 256
     n_percept_hidden_layer = 4
     n_percept_filters = 32
     beta_start = .01
     beta_end = .0001
     decay_steps = 5000000
     summary_steps = 10
-    num_local_steps = 20
-    learning_rate = 1e-4
+    num_local_steps = 40
+    learning_rate = 5e-5
     discount = .99
 
     # feudal
@@ -23,6 +22,10 @@ class Config(object):
     manager_lstm_size = 64
     g_dim = 64
     c = 5 # manager timesteps
+    s_is_obs = False # skips precept and z, used for visualization mainly
+    if s_is_obs:
+        # make s_dim and g_dim that of the observation
+        s_dim = g_dim = 25
 
     # worker
     # constrained to match manager_lstm_size because of the way features are stored
