@@ -51,10 +51,19 @@ class TestFeudalPolicyOptimizer(unittest.TestCase):
         # really because s_diff is always 0
         env = gym.make('TwoRoundNondeterministicRewardBoxObs-v0')
         config = test_config.Config()
-        config.beta_start = 10.
+        config.beta_start = .01
         config.beta_end = .01
+        config.similarity_metric = 'cosine'
+        config.batch_pad_method = 'zeros'
         n_rollout_batches = 1000
         config.decay_steps = 2 * n_rollout_batches
+        config.g_dim = g_dim = 2
+        config.s_dim = 2
+        config.c = 1
+        config.manager_lstm_size = 2
+        config.worker_lstm_size = 2
+        config.k = 2
+        config.num_local_steps = 2
         config.manager_learning_rate = config.worker_learning_rate = 1e-3
         summary_writer = tf.summary.FileWriter('/tmp/test')
         with tf.Session() as session:
@@ -64,7 +73,6 @@ class TestFeudalPolicyOptimizer(unittest.TestCase):
             
             for _ in range(n_rollout_batches):
                 feudal_opt.train(session)
-                input()
 
 
 

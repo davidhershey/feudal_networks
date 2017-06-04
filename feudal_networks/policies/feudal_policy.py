@@ -25,7 +25,8 @@ class FeudalPolicy(policy.Policy):
         self.k = config.k # dimensionality of w
         self.g_dim = config.g_dim # dimensionality of goals
         self.batch_processor = FeudalBatchProcessor(
-            config.c, pad_method=config.batch_pad_method)
+            config.c, pad_method=config.batch_pad_method,
+            similarity_metric=config.similarity_metric)
         self._build_model()
 
     def _build_model(self):
@@ -110,7 +111,7 @@ class FeudalPolicy(policy.Policy):
                         dtype='float32',
                         name='manger_lstm_in2')
                 ]
-                g_hat, self.manager_state_init, self.manager_state_out = DilatedLSTM(
+                lstm_output, self.manager_state_init, self.manager_state_out = DilatedLSTM(
                     x, 
                     self.config.manager_lstm_size, 
                     self.manager_state_in, 
@@ -126,13 +127,13 @@ class FeudalPolicy(policy.Policy):
                 self.manager_state_in = self.manager_lstm.state_in
                 self.manager_state_out = self.manager_lstm.state_out
                 self.manager_state_init = self.manager_lstm.state_init
-                g_hat = self.manager_lstm.output
+                lstm_output = self.manager_lstm.output
             else:
                 raise ValueError('invalid config.rnn_type: {}'.format(
                     self.config.manager_rnn_type))
             
             hidden_g_hat = tf.layers.dense(
-                        inputs=g_hat,
+                        inputs=lstm_output,
                         units=self.config.g_dim,
                         activation=tf.nn.elu,
                         name='hidden_g_hat'
@@ -140,13 +141,14 @@ class FeudalPolicy(policy.Policy):
             g_hat = linear(hidden_g_hat, self.config.g_dim, 'g_hat', 
                 initializer=normalized_columns_initializer(1.0)
             )
+
             self.g = tf.nn.l2_normalize(g_hat, dim=1)
 
             if self.config.verbose:
                 self.g = tf.Print(self.g, [self.g, g_hat], 
                     message='\nmanager g and g_hat: ', summarize=5)
 
-            self.manager_vf = self._build_value(g_hat)
+            self.manager_vf = self._build_value(lstm_output)
 
             # add manager c, h to state in and out
             self.state_in = [
@@ -162,6 +164,28 @@ class FeudalPolicy(policy.Policy):
         with tf.variable_scope('worker'):
             num_acts = self.act_space
 
+            # Calculate w
+            cut_g = tf.stop_gradient(self.g)
+            cut_g = tf.expand_dims(cut_g, [1])
+            gstack = tf.concat([self.prev_g, cut_g], axis=1)
+
+            self.last_c_g = gstack[:,1:]
+            gsum = tf.reduce_sum(gstack, axis=1)
+
+            if self.config.verbose:
+                gsum = tf.Print(gsum, [gsum], 
+                    message='\nworker gsum: ', summarize=32)
+
+            phi = tf.get_variable("phi", (self.g_dim, self.k),
+                initializer=normalized_columns_initializer(1.))
+
+            if self.config.verbose:
+                phi = tf.Print(phi, [phi], 
+                    message='\nworker phi: ', summarize=5)
+
+            w = tf.matmul(gsum, phi)
+            tf.summary.scalar('model/w_magnitude', tf.reduce_mean(w))
+            
             # Calculate U
             self.worker_lstm = SingleStepLSTM(
                 tf.expand_dims(self.z, [0]),
@@ -169,6 +193,10 @@ class FeudalPolicy(policy.Policy):
                 step_size=tf.shape(self.obs)[:1]
             )
             lstm_output = self.worker_lstm.output
+
+            if self.config.worker_hint:
+                worker_hint = tf.stop_gradient(tf.contrib.layers.batch_norm(w))
+                lstm_output = tf.concat([lstm_output, worker_hint], axis=1)
             
             self.worker_vf = self._build_value(lstm_output)
 
@@ -193,26 +221,7 @@ class FeudalPolicy(policy.Policy):
                 self.U = tf.Print(self.U, [self.U], 
                     message='\nworker U: ', summarize=num_acts * self.k)
 
-            # Calculate w
-            cut_g = tf.stop_gradient(self.g)
-            cut_g = tf.expand_dims(cut_g, [1])
-            gstack = tf.concat([self.prev_g, cut_g], axis=1)
-
-            self.last_c_g = gstack[:,1:]
-            gsum = tf.reduce_sum(gstack, axis=1)
-
-            if self.config.verbose:
-                gsum = tf.Print(gsum, [gsum], 
-                    message='\nworker gsum: ', summarize=32)
-
-            phi = tf.get_variable("phi", (self.g_dim, self.k),
-                initializer=normalized_columns_initializer(1.))
-
-            if self.config.verbose:
-                phi = tf.Print(phi, [phi], 
-                    message='\nworker phi: ', summarize=5)
-
-            w = tf.matmul(gsum, phi)
+            # expand dims for combining with U
             w = tf.expand_dims(w, [2])
 
             if self.config.verbose:
@@ -229,7 +238,7 @@ class FeudalPolicy(policy.Policy):
                     message='\nworker logits, pi, log_pi: ', summarize=15)
 
             self.sample = policy_utils.categorical_sample(
-                tf.reshape(logits,[-1,num_acts]), num_acts)[0, :]
+                tf.reshape(logits,[-1, num_acts]), num_acts)[0, :]
 
             # add worker c, h to state in and out
             self.state_in.extend([
@@ -257,20 +266,44 @@ class FeudalPolicy(policy.Policy):
     def _build_loss(self):
 
         # manager policy loss
-        cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
-        dot = tf.reduce_sum(tf.multiply(self.s_diff, self.g), axis=1)
-        gcut = tf.stop_gradient(self.g)
-        mag = tf.norm(self.s_diff, axis=1) * tf.norm(gcut, axis=1) + self.config.eps
-        dcos = dot / mag
+        if self.config.similarity_metric == 'cosine':
+            dot = tf.reduce_sum(tf.multiply(self.s_diff, self.g), axis=1)
+            # add epislon in before the norm, otherwise can get nans when 
+            # g is all zeros and try to backprop the norm 
+            # can also prevent by stopping gradient, but this actually 
+            # should be included as part of the backprop
+            gcut = self.g + self.config.eps
+            # also have to epsilon here as well in case s_diff is 0
+            mag = tf.norm(self.s_diff, axis=1) * tf.norm(gcut, axis=1) + self.config.eps
+            dcos = dot / mag
+            similarity = dcos
 
+            if self.config.verbose:
+                dcos = tf.Print(dcos, [dcos, dot, mag], 
+                    message='\nfeudal dcos, dot, magnitude: ', summarize=15)
+            tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))
+            tf.summary.scalar("model/dcos_magnitude", tf.reduce_mean(mag))
+
+        elif self.config.similarity_metric == 'gaussian':
+            diff = self.s_diff - self.g
+            similarity = tf.exp(-tf.reduce_sum(tf.multiply(diff, diff), axis=-1))
+            
+            if self.config.verbose:
+                similarity = tf.Print(similarity, [similarity], 
+                    message='\ngaussian pdf of g and s_diff: ', summarize=15)
+            tf.summary.scalar("model/gaussian_pdf", tf.reduce_mean(similarity))
+
+        else:
+            raise ValueError('invalid similarity metric: {}'.format(
+                self.config.similarity_metric))
+
+        cutoff_vf_manager = tf.reshape(tf.stop_gradient(self.manager_vf),[-1])
         if self.config.verbose:
-            dcos = tf.Print(dcos, [dcos, dot, mag], 
-                message='\nfeudal loss dcos, dot, magnitude: ', summarize=15)
             cutoff_vf_manager = tf.Print(cutoff_vf_manager, 
                 [self.manager_r, cutoff_vf_manager], 
                 message='\nfeudal loss return, manager vf: ', summarize=10)
 
-        manager_loss = -tf.reduce_sum((self.manager_r - cutoff_vf_manager) * dcos)
+        manager_loss = -tf.reduce_sum((self.manager_r - cutoff_vf_manager) * similarity)
 
         # manager value loss
         Am = self.manager_r - self.manager_vf
@@ -312,12 +345,13 @@ class FeudalPolicy(policy.Policy):
                     manager_vf_loss - entropy * beta)
 
         bs = tf.to_float(tf.shape(self.obs)[0])
-        tf.summary.scalar("model/manager_loss", manager_loss / bs)
-        tf.summary.scalar("model/worker_loss", worker_loss / bs)
+        tf.summary.scalar("model/manager_pi_loss", manager_loss / bs)
+        tf.summary.scalar("model/worker_pi_loss", worker_loss / bs)
         tf.summary.scalar("model/value_mean", tf.reduce_mean(self.manager_vf))
-        tf.summary.scalar("model/value_loss", manager_vf_loss / bs)
-        tf.summary.scalar("model/value_loss_scaled", manager_vf_loss / bs * .5)
+        tf.summary.scalar("model/manager_value_loss_scaled", manager_vf_loss / bs * .5)
+        tf.summary.scalar("model/worker_value_loss_scaled", worker_vf_loss / bs * .5)
         tf.summary.scalar("model/entropy", entropy / bs)
+        tf.summary.scalar("model/mean_log_pi_of_action", tf.reduce_mean(log_p))
         tf.summary.scalar("model/entropy_loss_scaled", -entropy / bs * beta)
         tf.summary.scalar("model/var_global_norm", 
             tf.global_norm(tf.get_collection(
@@ -340,8 +374,6 @@ class FeudalPolicy(policy.Policy):
                 tf.multiply(self.s_diff, self.g), (-1, side_length, side_length, 1)),
                 max_outputs=1)
         tf.summary.scalar("model/intrinsic_reward", tf.reduce_mean(alpha * self.ri))
-        tf.summary.scalar("model/dcos", tf.reduce_mean(dcos))
-        tf.summary.scalar("model/dcos_magnitude", tf.reduce_mean(mag))
         tf.summary.scalar("model/manager_return", tf.reduce_mean(self.manager_r))
         tf.summary.scalar("model/worker_return", tf.reduce_mean(self.worker_r))
 

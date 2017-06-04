@@ -1,10 +1,15 @@
 
 import numpy as np
 from collections import namedtuple
+from scipy.stats import multivariate_normal
 
 def cosine_similarity(u, v, eps=1e-8):
     return (np.dot(np.squeeze(u), np.squeeze(v)) 
             / (np.linalg.norm(u) * np.linalg.norm(v) + eps))
+
+def normalized_gaussian_pdf(x, mean):
+    diff = np.squeeze(x - mean)
+    return np.exp(-np.dot(diff.T, diff))
 
 Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
     "s_diff", "ri", "gsum", "features"])
@@ -49,10 +54,17 @@ class FeudalBatchProcessor(object):
     This class adapts the batch of PolicyOptimizer to a batch useable by
     the FeudalPolicy.
     """
-    def __init__(self, c, pad_method='zeros'):
+    def __init__(self, c, pad_method='zeros', similarity_metric='cosine'):
         self.c = c
         self.last_terminal = True
         self.pad_method = pad_method
+        if similarity_metric == 'cosine':
+            self.similarity = cosine_similarity
+        elif similarity_metric == 'gaussian':
+            self.similarity = normalized_gaussian_pdf 
+        else:
+            raise ValueError('invalid similarity metric: {}'.format(
+                similarity_metric))
 
     def _pad_front(self, batch):
         if self.pad_method == 'same':
@@ -135,9 +147,7 @@ class FeudalBatchProcessor(object):
             # note that this for loop considers s and g values
             # 1 timestep to c timesteps (inclusively) ago
             for i in range(1, c + 1):
-                ri_s_diff = self.s[t] - self.s[t - i]
-                if np.linalg.norm(ri_s_diff) != 0:
-                    ri += cosine_similarity(ri_s_diff, self.g[t - i])
+                ri += self.similarity(self.s[t] - self.s[t - i], self.g[t - i])
             ri /= c
 
             # sum of g values used to derive w, input to the linear transform

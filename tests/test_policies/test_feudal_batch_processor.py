@@ -173,5 +173,19 @@ class TestFeudalBatchProcessor(unittest.TestCase):
         np.testing.assert_array_equal(fb.gsum, 
             [np.array([2,2]), np.array([2,2]), np.array([3,3])])
 
+    def test_intrinsic_reward_calculation_gaussian_similarity(self):
+        c = 2
+        fbp = FeudalBatchProcessor(
+            c, pad_method='same', similarity_metric='gaussian')
+
+        obs = a = m_returns = w_returns = features = [None, None, None]
+        terminal = True
+        s = [np.array([2,1]), np.array([1,2]), np.array([2,3])]
+        g = [np.array([1,1]), np.array([2,2]), np.array([3,3])]
+        b = Batch(obs, a, m_returns, w_returns, terminal, s, g, features)
+        fb = fbp.process_batch(b)
+        ri = [0.135335,  0.018316,  0.135335]
+        np.testing.assert_array_almost_equal(fb.ri, ri, 6)
+
 if __name__ == '__main__':
     unittest.main()

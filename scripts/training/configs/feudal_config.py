@@ -4,7 +4,7 @@ class Config(object):
     n_percept_hidden_layer = 4
     n_percept_filters = 32
     beta_start = .01
-    beta_end = .005
+    beta_end = .01
     decay_steps = 20000000
     summary_steps = 10
     num_local_steps = 20
@@ -19,16 +19,17 @@ class Config(object):
     # zeros typically will do better when the critical events occur at the 
     # beginning and end of the episode because they yield absolute direction
     # goals rather than no goals, which is what same yields.
-    batch_pad_method = 'zeros'
+    batch_pad_method = 'zeros' # 'same'
+    similarity_metric = 'cosine' # 'gaussian'
     
     # manager
     manager_rnn_type = 'lstm'
     s_dim = 64
     manager_lstm_size = 64
     g_dim = 64
-    c = 4 # manager timesteps
-    manager_discount = .99
-    manager_learning_rate = 5e-5
+    c = 10 # manager timesteps
+    manager_discount = .999
+    manager_learning_rate = 1e-4
     s_is_obs = False # skips precept and z, used for visualization mainly
     if s_is_obs:
         # make s_dim and g_dim that of the observation
@@ -43,3 +44,4 @@ class Config(object):
     alpha_steps = decay_steps / 20
     worker_discount = .95
     worker_learning_rate = 1e-4
+    worker_hint = True

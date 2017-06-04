@@ -6,7 +6,7 @@ loaded, and that particular value should be overwritten.
 """
 class Config(object):
     # common 
-    verbose = True
+    verbose = False
     testing = True
     n_percept_hidden_layer = 4
     n_percept_filters = 32
@@ -25,6 +25,7 @@ class Config(object):
     vf_hidden_size = 128
     eps = 1e-6
     batch_pad_method = 'same' # tests assume same, but zeros performs better
+    similarity_metric = 'cosine'
     
     # manager
     manager_rnn_type = 'lstm'
@@ -45,3 +46,4 @@ class Config(object):
     alpha_start = .5
     alpha_end = .5
     alpha_steps = decay_steps / 20
+    worker_hint = False # concat w to worker lstm output
