@@ -256,9 +256,9 @@ class FeudalPolicy(policy.Policy):
         dot = tf.reduce_sum(tf.multiply(self.s_diff, self.g), axis=1)
         gcut = self.g
         mag = tf.norm(self.s_diff, axis=1) * tf.norm(gcut, axis=1) + self.config.eps
-        dcos = dot / mag
+        dcos = tf.divide(dot, mag)
         # dcos = tf.Print(dcos, [tf.reduce_mean(dcos), tf.reduce_mean(tf.norm(self.s,axis=1))],
-        #     message='\nfeudal loss dcos, dot, magnitude: ', summarize=1)
+            # message='\nfeudal loss dcos, dot, magnitude: ', summarize=1)
 
         if self.config.verbose:
             dcos = tf.Print(dcos, [dcos, dot, mag],
