@@ -73,6 +73,8 @@ class FeudalPolicy(policy.Policy):
         for i in range(self.config.n_percept_hidden_layer):
             x = tf.nn.elu(conv2d(x, self.config.n_percept_filters,
                 "l_{}".format(i + 1), [3, 3], [2, 2]))
+            if self.config.use_batch_norm:
+                x = tf.contrib.layers.batch_norm(x)
         flattened_filters = policy_utils.flatten(x)
         self.z = tf.layers.dense(
             inputs=flattened_filters,
@@ -206,6 +208,11 @@ class FeudalPolicy(policy.Policy):
                 activation=tf.nn.elu,
                 name='flat_logits_hidden'
             )
+
+            if self.config.dropout_keep_prob < 1.:
+                flat_logits_hidden = tf.nn.dropout(
+                    flat_logits_hidden, self.config.dropout_keep_prob)
+
             flat_logits = tf.layers.dense(
                 inputs=flat_logits_hidden,
                 units=num_acts * self.k,
@@ -221,6 +228,11 @@ class FeudalPolicy(policy.Policy):
                 self.U = tf.Print(self.U, [self.U], 
                     message='\nworker U: ', summarize=num_acts * self.k)
 
+            tf.summary.image('model/U', 
+                tf.reshape(self.U, (-1, num_acts, self.k, 1)), max_outputs=1)
+            tf.summary.image('model/w', 
+                tf.reshape(w, (-1, 1, self.k, 1)), max_outputs=1)
+
             # expand dims for combining with U
             w = tf.expand_dims(w, [2])
 
@@ -230,6 +242,10 @@ class FeudalPolicy(policy.Policy):
 
             # calculate policy and sample
             logits = tf.reshape(tf.matmul(self.U, w),[-1, num_acts])
+
+            tf.summary.image('model/logits', 
+                tf.reshape(logits, (-1, 1, num_acts, 1)), max_outputs=1)
+
             self.pi = tf.nn.softmax(logits)
             self.log_pi = tf.nn.log_softmax(logits)
 
@@ -341,18 +357,32 @@ class FeudalPolicy(policy.Policy):
             power=1
         )
 
-        self.loss = (worker_loss + manager_loss + worker_vf_loss + 
-                    manager_vf_loss - entropy * beta)
+        reg_loss = tf.contrib.layers.apply_regularization(
+            tf.contrib.layers.l2_regularizer(self.config.l2_reg),
+            tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, 
+                tf.get_variable_scope().name))
+
+        # loss comprised of the individual losses
+        self.loss = (
+            worker_loss 
+            + manager_loss 
+            + worker_vf_loss 
+            + manager_vf_loss * self.config.manager_value_loss_weight
+            - entropy * beta
+            + reg_loss
+        )
 
         bs = tf.to_float(tf.shape(self.obs)[0])
         tf.summary.scalar("model/manager_pi_loss", manager_loss / bs)
         tf.summary.scalar("model/worker_pi_loss", worker_loss / bs)
         tf.summary.scalar("model/value_mean", tf.reduce_mean(self.manager_vf))
-        tf.summary.scalar("model/manager_value_loss_scaled", manager_vf_loss / bs * .5)
+        tf.summary.scalar("model/manager_value_loss_scaled", 
+            manager_vf_loss / bs * .5 *  self.config.manager_value_loss_weight)
         tf.summary.scalar("model/worker_value_loss_scaled", worker_vf_loss / bs * .5)
         tf.summary.scalar("model/entropy", entropy / bs)
         tf.summary.scalar("model/mean_log_pi_of_action", tf.reduce_mean(log_p))
         tf.summary.scalar("model/entropy_loss_scaled", -entropy / bs * beta)
+        tf.summary.scalar("model/l2_reg_loss_scaled", reg_loss)
         tf.summary.scalar("model/var_global_norm", 
             tf.global_norm(tf.get_collection(
                 tf.GraphKeys.TRAINABLE_VARIABLES, 

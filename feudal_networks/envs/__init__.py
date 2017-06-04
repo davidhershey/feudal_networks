@@ -36,7 +36,7 @@ register(
     entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
     max_episode_steps=200,
     kwargs = {
-        'room_length': 15,
+        'room_length': 9,
         'num_rooms_per_side': 1,
         'random_goal': True
     },

@@ -215,44 +215,40 @@ class FeudalPolicyOptimizer(object):
             # build runner thread for collecting rollouts
             self.runner = RunnerThread(env, self.policy, self.config.num_local_steps, visualise)
 
-            # formulate gradients
-            grads = tf.gradients(pi.loss, pi.var_list)
-            grads, _ = tf.clip_by_global_norm(grads, self.config.global_norm_clip)
-
             # build sync
             # copy weights from the parameter server to the local model
             self.sync = tf.group(*[v1.assign(v2)
                 for v1, v2 in zip(pi.var_list, self.network.var_list)])
 
-            manager_grads_and_vars = [(g,v) 
-                for (g,v) in zip(grads, self.network.var_list) 
-                if 'manager' in v.name]
-            worker_grads_and_vars = [(g,v) 
-                for (g,v) in zip(grads, self.network.var_list) 
-                if 'worker' in v.name]
+            # formulate worker gradients and update
+            global_w_vars = [v for v in self.network.var_list if 'worker' in v.name]
+            local_w_vars = [v for v in pi.var_list if 'worker' in v.name]
+            w_grads = tf.gradients(pi.loss, local_w_vars)
+            w_grads, _ = tf.clip_by_global_norm(
+                w_grads, self.config.worker_global_norm_clip)
+            w_grads_and_vars = [(g,v) for (g,v) in zip(w_grads, global_w_vars)]
+            w_opt = tf.train.AdamOptimizer(self.config.worker_learning_rate)
+            w_train_op = w_opt.apply_gradients(w_grads_and_vars)
 
+            # formulate manager gradients and update
+            global_m_vars = [v for v in self.network.var_list if 'manager' in v.name]
+            local_m_vars = [v for v in pi.var_list if 'manager' in v.name]
+            m_grads = tf.gradients(pi.loss, local_m_vars)
+            m_grads, _ = tf.clip_by_global_norm(
+                m_grads, self.config.manager_global_norm_clip)
+            m_grads_and_vars = [(g,v) for (g,v) in zip(m_grads, global_m_vars)]
+            m_opt = tf.train.AdamOptimizer(self.config.manager_learning_rate)
+            m_train_op = m_opt.apply_gradients(m_grads_and_vars)
+
+            # combine with global step increment
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
-
-            # build train op
-            manager_opt = tf.train.AdamOptimizer(self.config.manager_learning_rate)
-            manager_train_op = manager_opt.apply_gradients(manager_grads_and_vars)
-            worker_opt = tf.train.AdamOptimizer(self.config.worker_learning_rate)
-            worker_train_op = worker_opt.apply_gradients(worker_grads_and_vars)
-            self.train_op = tf.group(worker_train_op, manager_train_op, inc_step)
+            self.train_op = tf.group(w_train_op, m_train_op, inc_step)
             self.summary_writer = None
             self.local_steps = 0
 
             # summaries
-            tf.summary.scalar("model/grad_global_norm", tf.global_norm(grads))
-            worker_grads = tf.gradients(pi.loss, 
-                [v for v in pi.var_list if 'worker' in v.name])
-            tf.summary.scalar("model/worker_grad_global_norm", tf.global_norm(
-                worker_grads))
-            manager_grads = tf.gradients(pi.loss, 
-                [v for v in pi.var_list if 'manager' in v.name])
-            tf.summary.scalar("model/manager_grad_global_norm", tf.global_norm(
-                manager_grads))
-
+            tf.summary.scalar("grads/worker_grad_global_norm", tf.global_norm(w_grads))
+            tf.summary.scalar("grads/manager_grad_global_norm", tf.global_norm(m_grads))
             self.summary_op = tf.summary.merge_all()
 
     def start(self, sess, summary_writer):

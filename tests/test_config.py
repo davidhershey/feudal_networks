@@ -16,6 +16,9 @@ class Config(object):
     summary_steps = 10
     num_local_steps = 40
     global_norm_clip = 40
+    l2_reg = 5e-5
+    dropout_keep_prob = .9
+    use_batch_norm = False
 
     # lstm 
     size = 64
@@ -35,6 +38,8 @@ class Config(object):
     c = 5 # manager timesteps
     s_is_obs = False # skips precept and z, used for visualization mainly
     manager_learning_rate = 1e-4
+    manager_global_norm_clip = 40
+    manager_value_loss_weight = 1
     manager_discount = .99
     
     # worker
@@ -42,6 +47,7 @@ class Config(object):
     worker_lstm_size = g_dim 
     k = 16 # dimensionality of w
     worker_learning_rate = 1e-4
+    worker_global_norm_clip = 40
     worker_discount = .99
     alpha_start = .5
     alpha_end = .5
