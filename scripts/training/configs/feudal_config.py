@@ -27,7 +27,7 @@ class Config(object):
     s_dim = 64
     manager_lstm_size = 64
     g_dim = 64
-    c = 10 # manager timesteps
+    c = 8 # manager timesteps
     manager_discount = .999
     manager_learning_rate = 1e-4
     s_is_obs = False # skips precept and z, used for visualization mainly
