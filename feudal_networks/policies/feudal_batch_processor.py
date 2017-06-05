@@ -4,7 +4,7 @@ from collections import namedtuple
 from scipy.stats import multivariate_normal
 
 def cosine_similarity(u, v, eps=1e-8):
-    return (np.dot(np.squeeze(u), np.squeeze(v)) 
+    return (np.dot(np.squeeze(u), np.squeeze(v))
             / (np.linalg.norm(u) * np.linalg.norm(v) + eps))
 
 def normalized_gaussian_pdf(x, mean):
@@ -12,32 +12,43 @@ def normalized_gaussian_pdf(x, mean):
     return np.exp(-np.dot(diff.T, diff))
 
 Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
-    "s_diff", "ri", "gsum", "features"])
+    "s_diff", "ri", "gsum","g_prev", "features"])
 
 class FeudalBatch(object):
     def __init__(self):
         self.obs = []
+        self.g_prev = []
         self.a = []
         self.manager_returns = []
         self.worker_returns = []
         self.s_diff = []
         self.ri = []
         self.gsum = []
-        self.features = None
+        self.features = []
 
-    def add(self, obs, a, manager_returns, worker_returns, s_diff, ri, gsum, features):
+    def add(self, obs, a, manager_returns, worker_returns, s_diff, ri, gsum,g_prev, features):
         self.obs += [obs]
+        self.g_prev += [g_prev]
         self.a += [a]
         self.manager_returns += [manager_returns]
         self.worker_returns += [worker_returns]
         self.s_diff += [s_diff]
         self.ri += [ri]
         self.gsum += [gsum]
-        if self.features is None:
-            self.features = features
+        self.features +=[features]
+        # if self.features is None:
+            # self.features = features
 
     def get_batch(self):
         batch_obs = np.asarray(self.obs)
+        batch_g_prev = np.squeeze(np.asarray(self.g_prev))
+        sums = []
+        for i in range(len(batch_g_prev)):
+            sums.append(np.sum(batch_g_prev[i],axis=1))
+            # np.sum(batch_g_prev[i],axis=1)
+        # for g in self.g_prev:
+        #     print g.shape
+        #  self.g_prev
         batch_a = np.asarray(self.a)
         batch_manager_returns = np.asarray(self.manager_returns)
         batch_worker_returns = np.asarray(self.worker_returns)
@@ -45,9 +56,9 @@ class FeudalBatch(object):
         if len(batch_sd.shape) >= 2 and batch_sd.shape[1] == 1:
             batch_sd = np.squeeze(batch_sd, axis=1)
         batch_ri = np.asarray(self.ri)
-        batch_gs = np.asarray(self.gsum)
-        return Batch(batch_obs, batch_a, batch_manager_returns, 
-            batch_worker_returns, batch_sd, batch_ri, batch_gs, self.features)
+        batch_gs = np.asarray(sums)
+        return Batch(batch_obs, batch_a, batch_manager_returns,
+            batch_worker_returns, batch_sd, batch_ri, batch_gs,batch_g_prev, self.features[0])
 
 class FeudalBatchProcessor(object):
     """
@@ -61,7 +72,7 @@ class FeudalBatchProcessor(object):
         if similarity_metric == 'cosine':
             self.similarity = cosine_similarity
         elif similarity_metric == 'gaussian':
-            self.similarity = normalized_gaussian_pdf 
+            self.similarity = normalized_gaussian_pdf
         else:
             raise ValueError('invalid similarity metric: {}'.format(
                 similarity_metric))
@@ -78,6 +89,7 @@ class FeudalBatchProcessor(object):
 
         # prepend with dummy values so indexing is the same
         self.obs = [None for _ in range(self.c)]
+        self.g_prev = [None for _ in range(self.c)]
         self.a = [None for _ in range(self.c)]
         self.manager_returns = [None for _ in range(self.c)]
         self.worker_returns = [None for _ in range(self.c)]
@@ -100,6 +112,7 @@ class FeudalBatchProcessor(object):
 
         # extend with the actual values
         self.obs.extend(batch.obs)
+        self.g_prev.extend(batch.g_prev)
         self.a.extend(batch.a)
         self.manager_returns.extend(batch.manager_returns)
         self.worker_returns.extend(batch.worker_returns)
@@ -156,8 +169,8 @@ class FeudalBatchProcessor(object):
                 gsum += self.g[i]
 
             # add to the batch
-            feudal_batch.add(self.obs[t], self.a[t], self.manager_returns[t], 
-                self.worker_returns[t], s_diff, ri, gsum, self.features[t])
+            feudal_batch.add(self.obs[t], self.a[t], self.manager_returns[t],
+                self.worker_returns[t], s_diff, ri, gsum,self.g_prev[t], self.features[t])
 
         # in the terminal case, set reset flag
         if batch.terminal:
@@ -168,6 +181,7 @@ class FeudalBatchProcessor(object):
         else:
             twoc = 2 * self.c
             self.obs = self.obs[-twoc:]
+            self.g_prev = self.g_prev[-twoc:]
             self.a = self.a[-twoc:]
             self.manager_returns = self.manager_returns[-twoc:]
             self.worker_returns = self.worker_returns[-twoc:]

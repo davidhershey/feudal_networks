@@ -1,5 +1,5 @@
 class Config(object):
-    # common 
+    # common
     verbose = False
     n_percept_hidden_layer = 4
     n_percept_filters = 32
@@ -7,25 +7,25 @@ class Config(object):
     beta_end = .01
     decay_steps = 20000000
     summary_steps = 10
-    num_local_steps = 20
+    num_local_steps = 400
     testing = False
     l2_reg = 5e-5
     dropout_keep_prob = .95
     use_batch_norm = True
-    
+
     # feudal
     z_dim = 64
     vf_hidden_size = 64
     eps = 1e-8
     # how the batch is padded at the beginning and end of the episode
-    # zeros typically will do better when the critical events occur at the 
+    # zeros typically will do better when the critical events occur at the
     # beginning and end of the episode because they yield absolute direction
     # goals rather than no goals, which is what same yields.
     batch_pad_method = 'zeros' # 'same'
-    similarity_metric = 'gaussian' # 'gaussian'
-    
+    similarity_metric = 'cosine' # 'gaussian'
+
     # manager
-    manager_rnn_type = 'lstm'
+    manager_rnn_type = 'dilated'
     s_dim = 64
     manager_lstm_size = 64
     g_dim = 64
@@ -34,10 +34,13 @@ class Config(object):
     manager_discount = .99
     manager_learning_rate = 1e-4
     manager_value_loss_weight = .1
+    g_eps = .02 # Probability of random goal
     s_is_obs = False # skips precept and z, used for visualization mainly
     if s_is_obs:
         # make s_dim and g_dim that of the observation
         s_dim = g_dim = 25
+
+    david_debug = False
 
     # worker
     # constrained to match manager_lstm_size because of the way features are stored

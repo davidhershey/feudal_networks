@@ -19,23 +19,24 @@ def process_rollout(rollout, manager_gamma, worker_gamma, lambda_=1.0):
     """
 given a rollout, compute its returns and the advantage
 """
-    batch_si = np.asarray(rollout.states)
-    batch_a = np.asarray(rollout.actions)
+    batch_si = rollout.states
+    batch_a = rollout.actions
 
-    rewards = np.asarray(rollout.rewards)
-    manager_rewards_plus_v = np.asarray(rollout.rewards + [rollout.manager_r])
-    worker_rewards_plus_v = np.asarray(rollout.rewards + [rollout.worker_r])
+    rewards = rollout.rewards
+    manager_rewards_plus_v = rollout.rewards + [rollout.manager_r]
+    worker_rewards_plus_v = rollout.rewards + [rollout.worker_r]
     batch_manager_r = discount(manager_rewards_plus_v, manager_gamma)[:-1]
     batch_worker_r = discount(worker_rewards_plus_v, worker_gamma)[:-1]
 
-    batch_s = np.asarray(rollout.ss)
-    batch_g = np.asarray(rollout.gs)
+    batch_s = rollout.ss
+    batch_g = rollout.gs
+    batch_g_prev = rollout.g_prev
     features = rollout.features
-    return Batch(batch_si, batch_a, batch_manager_r, batch_worker_r, 
-        rollout.terminal, batch_s, batch_g, features)
+    return Batch(batch_si, batch_a, batch_manager_r, batch_worker_r,
+        rollout.terminal, batch_s, batch_g,batch_g_prev, features)
 
-Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns", 
-    "terminal", "s", "g", "features"])
+Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
+    "terminal", "s", "g","g_prev", "features"])
 
 class PartialRollout(object):
     """
@@ -49,12 +50,13 @@ class PartialRollout(object):
         self.values = []
         self.ss = []
         self.gs = []
+        self.g_prev = []
         self.features = []
         self.manager_r = 0.0
         self.worker_r = 0.0
         self.terminal = False
 
-    def add(self, state, action, reward, value,g,s, terminal, features):
+    def add(self, state, action, reward, value,g,s,g_prev, terminal, features):
         self.states += [state]
         self.actions += [action]
         self.rewards += [reward]
@@ -62,6 +64,7 @@ class PartialRollout(object):
         self.terminal = terminal
         self.features += [features]
         self.gs += [g]
+        self.g_prev += [g_prev]
         self.ss += [s]
 
     def extend(self, other):
@@ -71,6 +74,7 @@ class PartialRollout(object):
         self.rewards.extend(other.rewards)
         self.values.extend(other.values)
         self.gs.extend(other.gs)
+        self.g_prev.extend(other.g_prev)
         self.ss.extend(other.ss)
         self.manager_r = other.manager_r
         self.worker_r = other.worker_r
@@ -131,7 +135,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
         rollout = PartialRollout()
 
         for local_step_iter in range(num_local_steps):
-            # print last_c_g.shape
+            # print last_c_g
             fetched = policy.act(last_state,last_c_g, *last_features)
             action, value_, g, s, last_c_g, features = fetched[0], fetched[1], \
                                                     fetched[2], fetched[3], \
@@ -141,7 +145,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
             state, reward, terminal, info = env.step(action_to_take)
 
             # collect the experience
-            rollout.add(last_state, action, reward, value_, g, s, terminal, last_features)
+            rollout.add(last_state, action, reward, value_, g, s,last_c_g, terminal, last_features)
             length += 1
             rewards += reward
 
@@ -164,6 +168,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 reward_list.append(rewards)
                 mean_reward = np.mean(list(reward_list))
                 print("Episode finished. Sum of rewards: %f. Length: %d.  Mean Reward: %f" % (rewards, length,mean_reward))
+                # sleep(.2)
                 length = 0
                 rewards = 0
                 break
@@ -192,12 +197,12 @@ class FeudalPolicyOptimizer(object):
 
         with tf.device(global_device):
             with tf.variable_scope("global"):
-                self.global_step = tf.get_variable("global_step", [], tf.int32, 
+                self.global_step = tf.get_variable("global_step", [], tf.int32,
                     initializer=tf.constant_initializer(0, dtype=tf.int32),
                     trainable=False)
                 self.network = FeudalPolicy(
-                    env.observation_space.shape, 
-                    env.action_space.n, 
+                    env.observation_space.shape,
+                    env.action_space.n,
                     self.global_step,
                     config
                 )
@@ -205,7 +210,7 @@ class FeudalPolicyOptimizer(object):
         with tf.device(worker_device):
             with tf.variable_scope("local"):
                 self.local_network = pi = FeudalPolicy(
-                    env.observation_space.shape, 
+                    env.observation_space.shape,
                     env.action_space.n,
                     self.global_step,
                     config
@@ -279,7 +284,7 @@ class FeudalPolicyOptimizer(object):
         # recent global weights
         sess.run(self.sync)
         rollout = self.pull_batch_from_queue()
-        batch = process_rollout(rollout, 
+        batch = process_rollout(rollout,
             manager_gamma=self.config.manager_discount,
             worker_gamma=self.config.worker_discount)
         batch = self.policy.update_batch(batch)
@@ -287,7 +292,7 @@ class FeudalPolicyOptimizer(object):
         should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
 
         if should_compute_summary:
-            fetches = [self.summary_op, self.policy.summary_op, self.train_op, 
+            fetches = [self.summary_op, self.policy.summary_op, self.train_op,
                 self.global_step]
         else:
             fetches = [self.train_op, self.global_step]
@@ -308,8 +313,8 @@ class FeudalPolicyOptimizer(object):
             self.policy.s_diff: batch.s_diff,
             self.network.s_diff: batch.s_diff,
 
-            self.policy.prev_g: batch.gsum,
-            self.network.prev_g: batch.gsum,
+            self.policy.prev_g: batch.g_prev,
+            self.network.prev_g: batch.g_prev,
 
             self.policy.ri: batch.ri,
             self.network.ri: batch.ri
