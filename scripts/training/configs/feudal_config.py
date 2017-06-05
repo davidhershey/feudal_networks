@@ -4,14 +4,14 @@ class Config(object):
     n_percept_hidden_layer = 4
     n_percept_filters = 32
     beta_start = .001
-    beta_end = .0001
-    decay_steps = 20000000
+    beta_end = .001
+    decay_steps = 5000000
     summary_steps = 10
     num_local_steps = 400
     testing = False
     l2_reg = 0.0
-    dropout_keep_prob = .95
-    use_batch_norm = True
+    dropout_keep_prob = 1.0
+    use_batch_norm = False
 
     # feudal
     z_dim = 64
@@ -26,18 +26,18 @@ class Config(object):
 
     # manager
     manager_rnn_type = 'dilated'
-    s_dim = 64
-    manager_lstm_size = 64
-    g_dim = 64
+    s_dim = 256
+    manager_lstm_size = 256
+    g_dim = 256
     c = 8 # manager timesteps
-    manager_global_norm_clip = 10
+    manager_global_norm_clip = 100
     manager_discount = .99
     manager_learning_rate = 1e-4
     manager_value_loss_weight = .1
 
-    g_eps_start = .05
+    g_eps_start = .10
     g_eps_end = 0.0
-    g_eps_steps = 20000000
+    g_eps_steps = 10000000
     # g_eps = .02 # Probability of random goal
     s_is_obs = False # skips precept and z, used for visualization mainly
     if s_is_obs:
@@ -50,8 +50,8 @@ class Config(object):
     # constrained to match manager_lstm_size because of the way features are stored
     worker_lstm_size = manager_lstm_size
     k = 16 # dimensionality of w
-    alpha_start = .4
-    alpha_end = .4
+    alpha_start = .35
+    alpha_end = .35
     alpha_steps = decay_steps / 20
     worker_discount = .95
     worker_learning_rate = 1e-4
