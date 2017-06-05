@@ -12,6 +12,7 @@ Optimal policy: action 1.
 Optimal value function: v(0)=1 (there is only one state, state 0)
 """
 
+import copy
 import numpy as np
 import gym
 from gym import spaces
@@ -41,7 +42,7 @@ Best action sequence is 0,1 with expected value 3.
 """
 
 class TwoRoundNondeterministicRewardBoxObsEnv(gym.Env):
-    def __init__(self, obs_shape=(64,64,1)):
+    def __init__(self, obs_shape=(2,2,1)):
         self.action_space = spaces.Discrete(2)
         self.observation_space = spaces.Discrete(3)
         self.observation_space = spaces.Box(low=0, high=0, shape=obs_shape)
@@ -52,7 +53,7 @@ class TwoRoundNondeterministicRewardBoxObsEnv(gym.Env):
             self._obs.fill(2)
         else:
             self._obs.fill(self.firstAction)
-        return self._obs
+        return copy.deepcopy(self._obs)
 
 
     def _step(self, action):

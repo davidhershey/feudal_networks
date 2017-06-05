@@ -1,4 +1,5 @@
 
+import copy 
 import cv2
 import gym
 from gym import spaces
@@ -38,7 +39,7 @@ class VisionMazeEnv(gym.Env):
         self._obs.fill(0)
         self._obs[self.state[0], self.state[1], self.agent_channel] = 1
         self._obs[self.goal_state[0], self.goal_state[1], self.goal_channel] = 1
-        return self._obs
+        return copy.deepcopy(self._obs)
 
     def _reset(self):
         if self.random_goal:
