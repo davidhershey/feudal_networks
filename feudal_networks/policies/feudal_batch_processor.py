@@ -12,12 +12,13 @@ def normalized_gaussian_pdf(x, mean):
     return np.exp(-np.dot(diff.T, diff))
 
 Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
-    "s_diff", "ri", "gsum","g_prev", "idx","features"])
+    "s_diff", "ri","g_in", "gsum","g_prev", "idx","features"])
 
 class FeudalBatch(object):
     def __init__(self):
         self.obs = []
         self.g_prev = []
+        self.g = []
         self.idx = []
         self.a = []
         self.manager_returns = []
@@ -27,9 +28,10 @@ class FeudalBatch(object):
         self.gsum = []
         self.features = []
 
-    def add(self, obs, a, manager_returns, worker_returns, s_diff, ri, gsum,g_prev,idx, features):
+    def add(self, obs, a, manager_returns, worker_returns, s_diff, ri,g, gsum,g_prev,idx, features):
         self.obs += [obs]
         self.g_prev += [g_prev]
+        self.g += [g]
         self.idx += [idx]
         self.a += [a]
         self.manager_returns += [manager_returns]
@@ -44,10 +46,13 @@ class FeudalBatch(object):
     def get_batch(self):
         batch_obs = np.asarray(self.obs)
         batch_idx = np.asarray(self.idx)
+        batch_g_in = np.squeeze(np.asarray(self.g))
         batch_g_prev = np.squeeze(np.asarray(self.g_prev))
         sums = []
         for i in range(len(batch_g_prev)):
-            sums.append(np.sum(batch_g_prev[i],axis=1))
+            # print batch_g_prev[i].shape
+            # s = np.sum(batch_g_prev[i],axis=0) + self.g[i]
+            sums.append(np.sum(batch_g_prev[i],axis=0))
             # np.sum(batch_g_prev[i],axis=1)
         # for g in self.g_prev:
         #     print g.shape
@@ -61,7 +66,7 @@ class FeudalBatch(object):
         batch_ri = np.asarray(self.ri)
         batch_gs = np.asarray(sums)
         return Batch(batch_obs, batch_a, batch_manager_returns,
-            batch_worker_returns, batch_sd, batch_ri, batch_gs,batch_g_prev,batch_idx[0], self.features[0])
+            batch_worker_returns, batch_sd, batch_ri, batch_g_in,batch_gs,batch_g_prev,batch_idx[0], self.features[0])
 
 class FeudalBatchProcessor(object):
     """
@@ -92,6 +97,7 @@ class FeudalBatchProcessor(object):
 
         # prepend with dummy values so indexing is the same
         self.obs = [None for _ in range(self.c)]
+        self.g_save = [None for _ in range(self.c)]
         self.g_prev = [None for _ in range(self.c)]
         self.idx = [None for _ in range(self.c)]
         self.a = [None for _ in range(self.c)]
@@ -116,6 +122,7 @@ class FeudalBatchProcessor(object):
 
         # extend with the actual values
         self.obs.extend(batch.obs)
+        self.g_save.extend(batch.g)
         self.idx.extend(batch.idx)
         self.g_prev.extend(batch.g_prev)
         self.a.extend(batch.a)
@@ -175,7 +182,7 @@ class FeudalBatchProcessor(object):
 
             # add to the batch
             feudal_batch.add(self.obs[t], self.a[t], self.manager_returns[t],
-                self.worker_returns[t], s_diff, ri, gsum,self.g_prev[t],self.idx[t], self.features[t])
+                self.worker_returns[t], s_diff, ri,self.g_save[t], gsum,self.g_prev[t],self.idx[t], self.features[t])
 
         # in the terminal case, set reset flag
         if batch.terminal:
@@ -187,6 +194,7 @@ class FeudalBatchProcessor(object):
             twoc = 2 * self.c
             self.obs = self.obs[-twoc:]
             self.idx = self.idx[-twoc:]
+            self.g_save = self.g_save[-twoc:]
             self.g_prev = self.g_prev[-twoc:]
             self.a = self.a[-twoc:]
             self.manager_returns = self.manager_returns[-twoc:]

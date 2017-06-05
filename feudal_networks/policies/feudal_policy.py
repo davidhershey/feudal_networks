@@ -61,6 +61,9 @@ class FeudalPolicy(policy.Policy):
         self.prev_g = tf.placeholder(tf.float32,
             shape=(None, self.config.c-1, self.g_dim),
             name='goals')
+        self.g_in = tf.placeholder(tf.float32,
+            shape=(None, self.g_dim),
+            name='g_in')
         self.ri = tf.placeholder(tf.float32,
             shape=(None,),
             name='intrinsic_rewards')
@@ -113,7 +116,7 @@ class FeudalPolicy(policy.Policy):
                         dtype='float32',
                         name='manger_lstm_in2')
                 ]
-                self.dilated_idx_in = tf.placeholder(shape=(),dtype='int32')
+                self.dilated_idx_in = tf.placeholder(shape=(),dtype='int32',name='didx')
                 lstm_output, self.manager_state_init, self.manager_state_out,self.dilated_idx_out = DilatedLSTM(
                     x,
                     self.config.manager_lstm_size,
@@ -145,9 +148,18 @@ class FeudalPolicy(policy.Policy):
             g_hat = linear(hidden_g_hat, self.config.g_dim, 'g_hat',
                 initializer=normalized_columns_initializer(1.0)
             )
-            # g_hat = tf.cond(tf.random_uniform(()) < self.config.g_eps,
-            #                     lambda: tf.random_normal(tf.shape(g_hat)),
-            #                     lambda: g_hat)
+
+            g_eps = tf.train.polynomial_decay(
+                self.config.g_eps_start,
+                self.global_step,
+                end_learning_rate=self.config.g_eps_end,
+                decay_steps=self.config.g_eps_steps,
+                power=1
+            )
+
+            g_hat = tf.cond(tf.random_uniform(()) < g_eps,
+                                lambda: tf.random_normal(tf.shape(g_hat)),
+                                lambda: g_hat)
 
             self.g = tf.nn.l2_normalize(g_hat, dim=1)
 
@@ -172,8 +184,7 @@ class FeudalPolicy(policy.Policy):
             num_acts = self.act_space
 
             # Calculate w
-            cut_g = tf.stop_gradient(self.g)
-            cut_g = tf.expand_dims(cut_g, [1])
+            cut_g = tf.expand_dims(self.g_in,[1])
             gstack = tf.concat([tf.zeros((tf.shape(cut_g)[0],self.config.c,self.g_dim)),self.prev_g, cut_g], axis=1)
 
             self.last_c_g = gstack[:,-(self.config.c-1):]
@@ -422,19 +433,29 @@ class FeudalPolicy(policy.Policy):
     def get_initial_features(self):
         return np.zeros((1, self.config.c-1, self.g_dim), np.float32),0, self.worker_lstm.state_init + self.manager_state_init
 
-    def act(self, ob, g,idx, cm, hm, cw, hw):
+    def act(self, ob, gp,idx, cm, hm, cw, hw):
         sess = tf.get_default_session()
-        return sess.run([self.sample, self.manager_vf, self.g, self.s, self.last_c_g, self.dilated_idx_out] + self.state_out,
+        g,s,idx,vf,cmo,hmo = sess.run([self.g, self.s, self.dilated_idx_out,self.manager_vf,self.state_out[0],self.state_out[1]],
                         {self.obs: [ob], self.state_in[0]: cm, self.state_in[1]: hm,\
-                         self.state_in[2]: cw, self.state_in[3]: hw,\
-                         self.prev_g: g,self.dilated_idx_in: idx})
+                         self.dilated_idx_in: idx})
 
-    def value(self, ob, g, idx,cm, hm, cw, hw):
-        sess = tf.get_default_session()
-        manager_vf, worker_vf = sess.run([self.manager_vf, self.worker_vf],
-                        {self.obs: [ob], self.state_in[0]: cm, self.state_in[1]: hm,\
+        ac,last_c_g,cwo,hwo =  sess.run([self.sample,self.last_c_g,self.state_out[2],self.state_out[3]],
+                        {self.obs: [ob], self.g_in: g,\
                          self.state_in[2]: cw, self.state_in[3]: hw,\
-                         self.prev_g: g, self.dilated_idx_in: idx})
+                         self.prev_g: gp})
+        return ac, vf, g, s, last_c_g,idx, cmo,hmo,cwo,hwo
+
+    def value(self, ob, gp, idx,cm, hm, cw, hw):
+        sess = tf.get_default_session()
+
+        manager_vf,g = sess.run([self.manager_vf,self.g],
+                        {self.obs: [ob], self.state_in[0]: cm, self.state_in[1]: hm,\
+                         self.dilated_idx_in: idx})
+
+        worker_vf =  sess.run([ self.worker_vf],
+                        {self.obs: [ob], self.g_in: g,\
+                         self.state_in[2]: cw, self.state_in[3]: hw,\
+                         self.prev_g: gp})
         return manager_vf[0], worker_vf[0]
 
     def update_batch(self, batch):

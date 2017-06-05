@@ -34,13 +34,17 @@ class Config(object):
     manager_discount = .99
     manager_learning_rate = 1e-4
     manager_value_loss_weight = .1
-    g_eps = .02 # Probability of random goal
+
+    g_eps_start = .05
+    g_eps_end = 0.0
+    g_eps_steps = 20000000
+    # g_eps = .02 # Probability of random goal
     s_is_obs = False # skips precept and z, used for visualization mainly
     if s_is_obs:
         # make s_dim and g_dim that of the observation
         s_dim = g_dim = 25
 
-    david_debug = True
+    david_debug = False
 
     # worker
     # constrained to match manager_lstm_size because of the way features are stored

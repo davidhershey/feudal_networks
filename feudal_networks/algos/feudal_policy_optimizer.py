@@ -140,7 +140,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
         rollout = PartialRollout()
 
         for local_step_iter in range(num_local_steps):
-            # print last_c_g
+            # print idx
             fetched = policy.act(last_state,last_c_g,idx, *last_features)
             action, value_, g, s, last_c_g,idx, features = fetched[0], fetched[1], \
                                                     fetched[2], fetched[3], \
@@ -238,7 +238,7 @@ class FeudalPolicyOptimizer(object):
             w_grads, _ = tf.clip_by_global_norm(
                 w_grads, self.config.worker_global_norm_clip)
             w_grads_and_vars = [(g,v) for (g,v) in zip(w_grads, global_w_vars)]
-            w_opt = tf.train.AdamOptimizer(self.config.worker_learning_rate)
+            w_opt = tf.train.RMSPropOptimizer(self.config.worker_learning_rate)
             w_train_op = w_opt.apply_gradients(w_grads_and_vars)
 
             # formulate manager gradients and update
@@ -248,12 +248,12 @@ class FeudalPolicyOptimizer(object):
             m_grads, _ = tf.clip_by_global_norm(
                 m_grads, self.config.manager_global_norm_clip)
             m_grads_and_vars = [(g,v) for (g,v) in zip(m_grads, global_m_vars)]
-            m_opt = tf.train.AdamOptimizer(self.config.manager_learning_rate)
-            m_train_op = m_opt.apply_gradients(m_grads_and_vars)
+            m_opt = tf.train.RMSPropOptimizer(self.config.manager_learning_rate)
+            self.m_train_op = m_opt.apply_gradients(m_grads_and_vars)
 
             # combine with global step increment
-            inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
-            self.train_op = tf.group(w_train_op, m_train_op, inc_step)
+            self.inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
+            self.w_train_op = tf.group(w_train_op,self.inc_step)
             self.summary_writer = None
             self.local_steps = 0
 
@@ -297,11 +297,7 @@ class FeudalPolicyOptimizer(object):
 
         should_compute_summary = self.task == 0 and self.local_steps % 11 == 0
 
-        if should_compute_summary:
-            fetches = [self.summary_op, self.policy.summary_op, self.train_op,
-                self.global_step]
-        else:
-            fetches = [self.train_op, self.global_step]
+
 
         # print 'acting'
         # self.policy.act(batch.obs[0],[batch.g_prev[0]], batch.features[0],\
@@ -330,12 +326,24 @@ class FeudalPolicyOptimizer(object):
             self.network.ri: batch.ri,
 
             self.policy.dilated_idx_in: batch.idx,
-            self.network.dilated_idx_in: batch.idx
+            self.network.dilated_idx_in: batch.idx,
+
+            self.policy.g_in: batch.g_in,
+            self.network.g_in: batch.g_in
         }
 
         for i in range(len(self.policy.state_in)):
             feed_dict[self.policy.state_in[i]] = batch.features[i]
             feed_dict[self.network.state_in[i]] = batch.features[i]
+
+
+        sess.run(self.m_train_op, feed_dict=feed_dict)
+
+        if should_compute_summary:
+            fetches = [self.summary_op, self.policy.summary_op, self.w_train_op,
+                self.global_step]
+        else:
+            fetches = [self.w_train_op, self.global_step]
 
         fetched = sess.run(fetches, feed_dict=feed_dict)
 
