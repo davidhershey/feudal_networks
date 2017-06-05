@@ -121,8 +121,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     runner appends the policy to the queue.
     """
     last_state = env.reset()
-    last_c_g,last_features = policy.get_initial_features()
-    # print last_c_g
+    last_c_g, last_features = policy.get_initial_features()
     length = 0
     rewards = 0
     reward_list = deque(maxlen=30)
@@ -132,16 +131,22 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
 
         for local_step_iter in range(num_local_steps):
             # print last_c_g.shape
-            fetched = policy.act(last_state,last_c_g, *last_features)
-            action, value_, g, s, last_c_g, features = fetched[0], fetched[1], \
-                                                    fetched[2], fetched[3], \
-                                                    fetched[4], fetched[5:]
+            outfeed = policy.act(last_state, last_c_g, *last_features)
+
+            action = outfeed['action']
+            value_ = outfeed['value_']
+            g = outfeed['g']
+            s = outfeed['s']
+            last_c_g = outfeed['last_c_g']
+            features = outfeed['features']
+
             action_to_take = action.argmax()
 
             state, reward, terminal, info = env.step(action_to_take)
 
             # collect the experience
-            rollout.add(last_state, action, reward, value_, g, s, terminal, last_features)
+            rollout.add(last_state, action, reward, value_, g, s, terminal, 
+                last_features)
             length += 1
             rewards += reward
 
@@ -160,7 +165,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 terminal_end = True
                 if length >= timestep_limit or not env.metadata.get('semantics.autoreset'):
                     last_state = env.reset()
-                last_c_g,last_features = policy.get_initial_features()
+                last_c_g, last_features = policy.get_initial_features()
                 reward_list.append(rewards)
                 mean_reward = np.mean(list(reward_list))
                 print("Episode finished. Sum of rewards: %f. Length: %d.  Mean Reward: %f" % (rewards, length,mean_reward))
@@ -308,8 +313,8 @@ class FeudalPolicyOptimizer(object):
             self.policy.s_diff: batch.s_diff,
             self.network.s_diff: batch.s_diff,
 
-            self.policy.prev_g: batch.gsum,
-            self.network.prev_g: batch.gsum,
+            self.policy.prev_g_sum: batch.gsum,
+            self.network.prev_g_sum: batch.gsum,
 
             self.policy.ri: batch.ri,
             self.network.ri: batch.ri
@@ -318,6 +323,11 @@ class FeudalPolicyOptimizer(object):
         for i in range(len(self.policy.state_in)):
             feed_dict[self.policy.state_in[i]] = batch.features[i]
             feed_dict[self.network.state_in[i]] = batch.features[i]
+
+        # print('train in g sum', batch.gsum)
+        pi = sess.run([self.policy.pi], feed_dict=feed_dict)
+        # print('train out pi', pi)
+        # input()
 
         fetched = sess.run(fetches, feed_dict=feed_dict)
 

@@ -154,6 +154,7 @@ class FeudalBatchProcessor(object):
             gsum = np.zeros_like(self.g[t - c])
             for i in range(t - c, t):
                 gsum += self.g[i]
+            gsum = np.squeeze(gsum)
 
             # add to the batch
             feudal_batch.add(self.obs[t], self.a[t], self.manager_returns[t], 

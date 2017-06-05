@@ -59,7 +59,7 @@ class FeudalPolicy(policy.Policy):
 
         # specific to FeUdal
         self.prev_g = tf.placeholder(tf.float32, 
-            shape=(None, None, self.g_dim),
+            shape=(None, self.config.c - 1, self.g_dim),
             name='goals')
         self.ri = tf.placeholder(tf.float32,
             shape=(None,),
@@ -73,8 +73,6 @@ class FeudalPolicy(policy.Policy):
         for i in range(self.config.n_percept_hidden_layer):
             x = tf.nn.elu(conv2d(x, self.config.n_percept_filters,
                 "l_{}".format(i + 1), [3, 3], [2, 2]))
-            if self.config.use_batch_norm:
-                x = tf.contrib.layers.batch_norm(x)
         flattened_filters = policy_utils.flatten(x)
         self.z = tf.layers.dense(
             inputs=flattened_filters,
@@ -82,7 +80,7 @@ class FeudalPolicy(policy.Policy):
             activation=tf.nn.elu,
             name='feudal_z'
         )
-
+    
     def _build_manager(self):
         with tf.variable_scope('manager'):
             # Calculate manager internal state
@@ -170,9 +168,16 @@ class FeudalPolicy(policy.Policy):
             cut_g = tf.stop_gradient(self.g)
             cut_g = tf.expand_dims(cut_g, [1])
             gstack = tf.concat([self.prev_g, cut_g], axis=1)
-
             self.last_c_g = gstack[:,1:]
             gsum = tf.reduce_sum(gstack, axis=1)
+
+            self.prev_g_sum = tf.reduce_sum(self.prev_g, axis=1)
+            gsum = self.prev_g_sum + self.g
+
+            # print(self.prev_g.shape)
+            # print(self.prev_g_sum.shape)
+            # print(gsum.shape)
+            # input()
 
             if self.config.verbose:
                 gsum = tf.Print(gsum, [gsum], 
@@ -197,7 +202,7 @@ class FeudalPolicy(policy.Policy):
             lstm_output = self.worker_lstm.output
 
             if self.config.worker_hint:
-                worker_hint = tf.stop_gradient(tf.contrib.layers.batch_norm(w))
+                worker_hint = tf.stop_gradient(w)
                 lstm_output = tf.concat([lstm_output, worker_hint], axis=1)
             
             self.worker_vf = self._build_value(lstm_output)
@@ -410,14 +415,55 @@ class FeudalPolicy(policy.Policy):
         self.summary_op = tf.summary.merge_all()
 
     def get_initial_features(self):
-        return np.zeros((1, 1, self.g_dim), np.float32), self.worker_lstm.state_init + self.manager_state_init
+        return np.zeros((1, self.config.c - 1, self.g_dim), np.float32), self.worker_lstm.state_init + self.manager_state_init
 
     def act(self, ob, g, cw, hw, cm, hm):
+        # sess = tf.get_default_session()
+        # return sess.run([self.sample, self.manager_vf, self.g, self.s, self.last_c_g] + self.state_out,
+        #                 {self.obs: [ob], self.state_in[0]: cw, self.state_in[1]: hw,\
+        #                  self.state_in[2]: cm, self.state_in[3]: hm,\
+        #                  self.prev_g: g})
+
         sess = tf.get_default_session()
-        return sess.run([self.sample, self.manager_vf, self.g, self.s, self.last_c_g] + self.state_out,
-                        {self.obs: [ob], self.state_in[0]: cw, self.state_in[1]: hw,\
-                         self.state_in[2]: cm, self.state_in[3]: hm,\
-                         self.prev_g: g})
+        feed_dict = {
+            self.obs: [ob], 
+            self.state_in[0]: cw, 
+            self.state_in[1]: hw,
+            self.state_in[2]: cm, 
+            self.state_in[3]: hm,
+            self.prev_g: g
+        }
+
+        # pi = sess.run([self.pi], feed_dict=feed_dict)[0]
+        # act, value = sess.run([self.sample, self.manager_vf], feed_dict=feed_dict)
+        # g = sess.run([self.g], feed_dict=feed_dict)[0]
+        # s = sess.run([self.s], feed_dict=feed_dict)[0]
+        # prev_c_g = sess.run([self.last_c_g], feed_dict=feed_dict)[0]
+        # features = sess.run([self.state_out], feed_dict=feed_dict)[0]
+
+        pi, act, value, g, s, prev_c_g, features = sess.run([
+                self.pi, 
+                self.sample, 
+                self.manager_vf, 
+                self.g, 
+                self.s, 
+                self.last_c_g, 
+                self.state_out], 
+            feed_dict=feed_dict)
+
+        # print('act out prev_c_g ', prev_c_g)
+        # print('act out features ', features)
+        # print('act out pi ', pi)
+        # print('act out prev g ', prev_c_g)
+        outfeed = {
+            'action':act,
+            'value_':value,
+            'g':g,
+            's':s,
+            'last_c_g':prev_c_g,
+            'features':features
+        }
+        return outfeed
 
     def value(self, ob, g, cw, hw, cm, hm):
         sess = tf.get_default_session()

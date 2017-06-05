@@ -41,7 +41,7 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME",
         # output all zeros, which is normally fine, but in the feudal case 
         # this yields a divide by zero error. Bounds are just small random.
         b = tf.get_variable("b", [1, 1, 1, num_filters],
-            initializer=tf.random_uniform_initializer(-w_bound, w_bound),
+            initializer=tf.constant_initializer(0.),
             collections=collections)
         return tf.nn.conv2d(x, w, stride_shape, pad) + b
 
