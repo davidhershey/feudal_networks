@@ -113,10 +113,12 @@ class FeudalPolicy(policy.Policy):
                         dtype='float32',
                         name='manger_lstm_in2')
                 ]
-                lstm_output, self.manager_state_init, self.manager_state_out = DilatedLSTM(
+                self.dilated_idx_in = tf.placeholder(shape=(),dtype='int32')
+                lstm_output, self.manager_state_init, self.manager_state_out,self.dilated_idx_out = DilatedLSTM(
                     x,
                     self.config.manager_lstm_size,
                     self.manager_state_in,
+                    self.dilated_idx_in,
                     chunks=self.config.c
                 )
 
@@ -260,7 +262,7 @@ class FeudalPolicy(policy.Policy):
                 tf.reshape(logits,[-1, num_acts]), num_acts)[0, :]
 
             if self.config.david_debug:
-                self.sample = tf.Print(self.sample,[self.sample,self.pi[0,:],self.g[0,:]],message='Sampled',summarize=6)
+                self.sample = tf.Print(self.sample,[self.sample,self.pi[0,:],self.prev_g[0,:]],message='Sampled',summarize=6)
             # add worker c, h to state in and out
             self.state_in.extend([
                 self.worker_lstm.state_in[0],
@@ -335,7 +337,7 @@ class FeudalPolicy(policy.Policy):
         cutoff_vf_worker = tf.reshape(tf.stop_gradient(self.worker_vf), [-1])
         log_p = tf.reduce_sum(self.log_pi * self.ac, axis=1)
         if self.config.david_debug:
-            log_p = tf.Print(log_p,[self.ac[0,:],self.pi[0,:],self.g[0,:]],message='loss',summarize=6)
+            log_p = tf.Print(log_p,[self.ac[0,:],self.pi[0,:],self.prev_g[0,:]],message='loss',summarize=6)
 
         if self.config.verbose:
             log_p = tf.Print(log_p, [self.ac],
@@ -418,21 +420,21 @@ class FeudalPolicy(policy.Policy):
         self.summary_op = tf.summary.merge_all()
 
     def get_initial_features(self):
-        return np.zeros((1, self.config.c-1, self.g_dim), np.float32), self.worker_lstm.state_init + self.manager_state_init
+        return np.zeros((1, self.config.c-1, self.g_dim), np.float32),0, self.worker_lstm.state_init + self.manager_state_init
 
-    def act(self, ob, g, cm, hm, cw, hw):
+    def act(self, ob, g,idx, cm, hm, cw, hw):
         sess = tf.get_default_session()
-        return sess.run([self.sample, self.manager_vf, self.g, self.s, self.last_c_g] + self.state_out,
+        return sess.run([self.sample, self.manager_vf, self.g, self.s, self.last_c_g, self.dilated_idx_out] + self.state_out,
                         {self.obs: [ob], self.state_in[0]: cm, self.state_in[1]: hm,\
                          self.state_in[2]: cw, self.state_in[3]: hw,\
-                         self.prev_g: g})
+                         self.prev_g: g,self.dilated_idx_in: idx})
 
-    def value(self, ob, g, cm, hm, cw, hw):
+    def value(self, ob, g, idx,cm, hm, cw, hw):
         sess = tf.get_default_session()
         manager_vf, worker_vf = sess.run([self.manager_vf, self.worker_vf],
                         {self.obs: [ob], self.state_in[0]: cm, self.state_in[1]: hm,\
                          self.state_in[2]: cw, self.state_in[3]: hw,\
-                         self.prev_g: g})
+                         self.prev_g: g, self.dilated_idx_in: idx})
         return manager_vf[0], worker_vf[0]
 
     def update_batch(self, batch):

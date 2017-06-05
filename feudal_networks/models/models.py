@@ -37,8 +37,8 @@ def conv2d(x, num_filters, name, filter_size=(3, 3), stride=(1, 1), pad="SAME",
         w = tf.get_variable("W", filter_shape, dtype,
             tf.random_uniform_initializer(-w_bound, w_bound),
             collections=collections)
-        # adding initialization to bias because otherwise the network will 
-        # output all zeros, which is normally fine, but in the feudal case 
+        # adding initialization to bias because otherwise the network will
+        # output all zeros, which is normally fine, but in the feudal case
         # this yields a divide by zero error. Bounds are just small random.
         b = tf.get_variable("b", [1, 1, 1, num_filters],
             initializer=tf.random_uniform_initializer(-w_bound, w_bound),
@@ -107,7 +107,7 @@ def conditional_backprop(do_backprop, tensor):
     y = t + tf.stop_gradient(tensor - t)
     return y
 
-def DilatedLSTM(s_t, size,state_in,chunks=8):
+def DilatedLSTM(s_t, size,state_in,idx_in,chunks=8):
 
     def dilate_one_time_step(one_h, switcher, num_chunks):
         h_slices = []
@@ -124,6 +124,7 @@ def DilatedLSTM(s_t, size,state_in,chunks=8):
     lstm = rnn.LSTMCell(size, state_is_tuple=True)
     c_init = np.zeros((1, lstm.state_size.c), np.float32)
     h_init = np.zeros((1, lstm.state_size.h), np.float32)
+
     state_init = [c_init, h_init]
     # chunks = 8
 
@@ -137,11 +138,11 @@ def DilatedLSTM(s_t, size,state_in,chunks=8):
         new_i = tf.mod(i, chunks)
         return out, state_out, new_i
 
-    rnn_outputs, final_states, mod_idxs = tf.scan(dlstm_scan_fn,
+    rnn_outputs, final_states, out_idx = tf.scan(dlstm_scan_fn,
                                                   tf.transpose(s_t, [1, 0, 2]),
-                                                  initializer=(state_in[1], rnn.LSTMStateTuple(*state_in), tf.constant(0)))
+                                                  initializer=(state_in[1], rnn.LSTMStateTuple(*state_in), idx_in))
 
     state_out = [final_states[0][:, 0, :], final_states[1][:, 0, :]]
     cell_states = final_states[0][:, 0, :]
     out_states = final_states[1][:, 0, :]
-    return out_states, state_init, state_out
+    return out_states, state_init, state_out,out_idx

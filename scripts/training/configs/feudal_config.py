@@ -3,13 +3,13 @@ class Config(object):
     verbose = False
     n_percept_hidden_layer = 4
     n_percept_filters = 32
-    beta_start = .01
-    beta_end = .01
+    beta_start = .001
+    beta_end = .0001
     decay_steps = 20000000
     summary_steps = 10
     num_local_steps = 400
     testing = False
-    l2_reg = 5e-5
+    l2_reg = 0.0
     dropout_keep_prob = .95
     use_batch_norm = True
 
@@ -40,16 +40,16 @@ class Config(object):
         # make s_dim and g_dim that of the observation
         s_dim = g_dim = 25
 
-    david_debug = False
+    david_debug = True
 
     # worker
     # constrained to match manager_lstm_size because of the way features are stored
     worker_lstm_size = manager_lstm_size
     k = 16 # dimensionality of w
-    alpha_start = .0
-    alpha_end = 1.
+    alpha_start = .4
+    alpha_end = .4
     alpha_steps = decay_steps / 20
     worker_discount = .95
     worker_learning_rate = 1e-4
     worker_global_norm_clip = 40
-    worker_hint = True
+    worker_hint = False

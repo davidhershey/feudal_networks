@@ -31,12 +31,14 @@ given a rollout, compute its returns and the advantage
     batch_s = rollout.ss
     batch_g = rollout.gs
     batch_g_prev = rollout.g_prev
+
+    batch_idx = rollout.idx
     features = rollout.features
     return Batch(batch_si, batch_a, batch_manager_r, batch_worker_r,
-        rollout.terminal, batch_s, batch_g,batch_g_prev, features)
+        rollout.terminal, batch_s, batch_g,batch_g_prev,batch_idx, features)
 
 Batch = namedtuple("Batch", ["obs", "a", "manager_returns", "worker_returns",
-    "terminal", "s", "g","g_prev", "features"])
+    "terminal", "s", "g","g_prev","idx", "features"])
 
 class PartialRollout(object):
     """
@@ -51,12 +53,13 @@ class PartialRollout(object):
         self.ss = []
         self.gs = []
         self.g_prev = []
+        self.idx = []
         self.features = []
         self.manager_r = 0.0
         self.worker_r = 0.0
         self.terminal = False
 
-    def add(self, state, action, reward, value,g,s,g_prev, terminal, features):
+    def add(self, state, action, reward, value,g,s,g_prev,idx,terminal, features):
         self.states += [state]
         self.actions += [action]
         self.rewards += [reward]
@@ -65,6 +68,7 @@ class PartialRollout(object):
         self.features += [features]
         self.gs += [g]
         self.g_prev += [g_prev]
+        self.idx += [idx]
         self.ss += [s]
 
     def extend(self, other):
@@ -74,6 +78,7 @@ class PartialRollout(object):
         self.rewards.extend(other.rewards)
         self.values.extend(other.values)
         self.gs.extend(other.gs)
+        self.idx.extend(other.idx)
         self.g_prev.extend(other.g_prev)
         self.ss.extend(other.ss)
         self.manager_r = other.manager_r
@@ -125,7 +130,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     runner appends the policy to the queue.
     """
     last_state = env.reset()
-    last_c_g,last_features = policy.get_initial_features()
+    last_c_g,idx,last_features = policy.get_initial_features()
     # print last_c_g
     length = 0
     rewards = 0
@@ -136,16 +141,17 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
 
         for local_step_iter in range(num_local_steps):
             # print last_c_g
-            fetched = policy.act(last_state,last_c_g, *last_features)
-            action, value_, g, s, last_c_g, features = fetched[0], fetched[1], \
+            fetched = policy.act(last_state,last_c_g,idx, *last_features)
+            action, value_, g, s, last_c_g,idx, features = fetched[0], fetched[1], \
                                                     fetched[2], fetched[3], \
-                                                    fetched[4], fetched[5:]
+                                                    fetched[4], fetched[5][0],\
+                                                    fetched[6:]
             action_to_take = action.argmax()
 
             state, reward, terminal, info = env.step(action_to_take)
 
             # collect the experience
-            rollout.add(last_state, action, reward, value_, g, s,last_c_g, terminal, last_features)
+            rollout.add(last_state, action, reward, value_, g, s,last_c_g,idx, terminal, last_features)
             length += 1
             rewards += reward
 
@@ -164,7 +170,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 terminal_end = True
                 if length >= timestep_limit or not env.metadata.get('semantics.autoreset'):
                     last_state = env.reset()
-                last_c_g,last_features = policy.get_initial_features()
+                last_c_g,idx,last_features = policy.get_initial_features()
                 reward_list.append(rewards)
                 mean_reward = np.mean(list(reward_list))
                 print("Episode finished. Sum of rewards: %f. Length: %d.  Mean Reward: %f" % (rewards, length,mean_reward))
@@ -175,7 +181,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
 
         if not terminal_end:
             rollout.manager_r, rollout.worker_r = policy.value(
-                last_state, last_c_g, *last_features)
+                last_state, last_c_g,idx, *last_features)
 
         # once we have enough experience, yield it, and have the ThreadRunner place it on a queue
         yield rollout
@@ -297,6 +303,10 @@ class FeudalPolicyOptimizer(object):
         else:
             fetches = [self.train_op, self.global_step]
 
+        # print 'acting'
+        # self.policy.act(batch.obs[0],[batch.g_prev[0]], batch.features[0],\
+        #                 batch.features[1],batch.features[2],batch.features[3])
+
         feed_dict = {
             self.policy.obs: batch.obs,
             self.network.obs: batch.obs,
@@ -317,7 +327,10 @@ class FeudalPolicyOptimizer(object):
             self.network.prev_g: batch.g_prev,
 
             self.policy.ri: batch.ri,
-            self.network.ri: batch.ri
+            self.network.ri: batch.ri,
+
+            self.policy.dilated_idx_in: batch.idx,
+            self.network.dilated_idx_in: batch.idx
         }
 
         for i in range(len(self.policy.state_in)):
