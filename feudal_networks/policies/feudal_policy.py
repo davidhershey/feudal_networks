@@ -73,6 +73,8 @@ class FeudalPolicy(policy.Policy):
         for i in range(self.config.n_percept_hidden_layer):
             x = tf.nn.elu(conv2d(x, self.config.n_percept_filters,
                 "l_{}".format(i + 1), [3, 3], [2, 2]))
+            if self.config.dropout_keep_prob < 1.:
+                x = tf.nn.dropout(x, self.config.dropout_keep_prob)
         flattened_filters = policy_utils.flatten(x)
         self.z = tf.layers.dense(
             inputs=flattened_filters,

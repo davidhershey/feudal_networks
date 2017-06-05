@@ -3,14 +3,14 @@ class Config(object):
     verbose = False
     n_percept_hidden_layer = 4
     n_percept_filters = 32
-    beta_start = .01
-    beta_end = .01
+    beta_start = .05
+    beta_end = .05
     decay_steps = 1000000
     summary_steps = 10
     num_local_steps = 20
     testing = False
     l2_reg = 0.
-    dropout_keep_prob = 1.
+    dropout_keep_prob = .5
     
     # feudal
     z_dim = 64
@@ -21,16 +21,16 @@ class Config(object):
     # beginning and end of the episode because they yield absolute direction
     # goals rather than no goals, which is what same yields.
     batch_pad_method = 'same' # 'same'
-    similarity_metric = 'cosine' # 'gaussian'
+    similarity_metric = 'gaussian' # 'gaussian'
     
     # manager
     manager_rnn_type = 'lstm'
     s_dim = 64
     manager_lstm_size = 64
     g_dim = 64
-    c = 4 # manager timesteps
+    c = 8 # manager timesteps
     manager_global_norm_clip = 40
-    manager_discount = .99
+    manager_discount = .999
     manager_learning_rate = 5e-4
     manager_value_loss_weight = .1
     s_is_obs = False # skips precept and z, used for visualization mainly
