@@ -27,7 +27,7 @@ class Config(object):
     # manager
     manager_rnn_type = 'dilated'
     s_dim = 256
-    manager_lstm_size = 300
+    manager_lstm_size = 256
     g_dim = 256
     c = 10 # manager timesteps
     manager_global_norm_clip = 40

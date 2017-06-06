@@ -109,40 +109,40 @@ def conditional_backprop(do_backprop, tensor):
 
 def DilatedLSTM(s_t, size,state_in,idx_in,chunks=8):
 
-    def dilate_one_time_step(one_h, switcher, num_chunks):
-        h_slices = []
-        h_size = size
-        chunk_step_size = h_size // num_chunks
-        for switch_step, h_step in zip(range(num_chunks), range(0, h_size, chunk_step_size)):
-            one_switch = switcher[switch_step]
-            h_s = conditional_backprop(one_switch, one_h[h_step: h_step + chunk_step_size])
-            h_slices.append(h_s)
-        dh = tf.stack(h_slices)
-        dh = tf.reshape(dh, [-1, size])
-        return dh
-
     lstm = rnn.LSTMCell(size, state_is_tuple=True)
-    c_init = np.zeros((1, lstm.state_size.c), np.float32)
-    h_init = np.zeros((1, lstm.state_size.h), np.float32)
-
+    c_init = np.zeros((chunks, lstm.state_size.c), np.float32)
+    h_init = np.zeros((chunks, lstm.state_size.h), np.float32)
     state_init = [c_init, h_init]
-    # chunks = 8
 
     def dlstm_scan_fn(previous_output, current_input):
-        out, state_out = lstm(current_input, previous_output[1])
         i = previous_output[2]
-        basis_i = tf.one_hot(i, depth=chunks)
-        state_out_dilated = dilate_one_time_step(tf.squeeze(state_out[0]), basis_i, chunks)
-        state_out = rnn.LSTMStateTuple(state_out_dilated, state_out[1])
+        c = previous_output[1][0]
+        h = previous_output[1][1]
+        # old_state = [tf.expand_dims(c[i],[0]),tf.expand_dims(h[i],[0])]
+        old_state = rnn.LSTMStateTuple(tf.expand_dims(c[i],[0]),tf.expand_dims(h[i],[0]))
+        out, state_out = lstm(current_input, old_state)
+
+        co = state_out[0] - c[i]
+        ho = state_out[1] - h[i]
+
+        cob = tf.concat([tf.zeros((i,size)),co,tf.zeros((chunks-i-1,size))],axis=0)
+        hob = tf.concat([tf.zeros((i,size)),ho,tf.zeros((chunks-i-1,size))],axis=0)
+
+        # cob = tf.Print(cob,[tf.shape(cob)])
+        c_out = c + cob
+        h_out = h + hob
+        state_out = [c_out,h_out]
         i += tf.constant(1)
         new_i = tf.mod(i, chunks)
+        out = tf.reduce_mean(h_out,axis=0)
         return out, state_out, new_i
 
     rnn_outputs, final_states, out_idx = tf.scan(dlstm_scan_fn,
                                                   tf.transpose(s_t, [1, 0, 2]),
-                                                  initializer=(state_in[1], rnn.LSTMStateTuple(*state_in), idx_in))
+                                                  initializer=(state_in[1][0], state_in, idx_in))
 
-    state_out = [final_states[0][:, 0, :], final_states[1][:, 0, :]]
-    cell_states = final_states[0][:, 0, :]
-    out_states = final_states[1][:, 0, :]
-    return out_states, state_init, state_out,out_idx
+
+    state_out = [final_states[0][0, :, :], final_states[1][0, :, :]]
+    # cell_states = final_states[0][:, 0, :]
+    # out_states = final_states[1][:, 0, :]
+    return rnn_outputs, state_init, state_out,out_idx

@@ -108,11 +108,11 @@ class FeudalPolicy(policy.Policy):
             if self.config.manager_rnn_type == 'dilated':
                 self.manager_state_in = [
                     tf.placeholder(
-                        shape=(1, self.config.manager_lstm_size),
+                        shape=(self.config.c, self.config.manager_lstm_size),
                         dtype='float32',
                         name='manger_lstm_in1'),
                     tf.placeholder(
-                        shape=(1, self.config.manager_lstm_size),
+                        shape=(self.config.c, self.config.manager_lstm_size),
                         dtype='float32',
                         name='manger_lstm_in2')
                 ]
@@ -432,7 +432,7 @@ class FeudalPolicy(policy.Policy):
         self.summary_op = tf.summary.merge_all()
 
     def get_initial_features(self):
-        return np.zeros((1, self.config.c-1, self.g_dim), np.float32),0, self.worker_lstm.state_init + self.manager_state_init
+        return np.zeros((1, self.config.c-1, self.g_dim), np.float32),0, self.manager_state_init + self.worker_lstm.state_init
 
     def act(self, ob, gp,idx, cm, hm, cw, hw):
         sess = tf.get_default_session()
