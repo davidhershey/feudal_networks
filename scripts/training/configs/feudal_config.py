@@ -3,8 +3,8 @@ class Config(object):
     verbose = False
     n_percept_hidden_layer = 4
     n_percept_filters = 32
-    beta_start = .001
-    beta_end = .001
+    beta_start = .01
+    beta_end = .0001
     decay_steps = 5000000
     summary_steps = 10
     num_local_steps = 400
@@ -14,7 +14,7 @@ class Config(object):
     use_batch_norm = False
 
     # feudal
-    z_dim = 64
+    z_dim = 256
     vf_hidden_size = 64
     eps = 1e-8
     # how the batch is padded at the beginning and end of the episode
@@ -27,17 +27,18 @@ class Config(object):
     # manager
     manager_rnn_type = 'dilated'
     s_dim = 256
-    manager_lstm_size = 256
+    manager_lstm_size = 300
     g_dim = 256
-    c = 8 # manager timesteps
-    manager_global_norm_clip = 100
+    c = 10 # manager timesteps
+    manager_global_norm_clip = 40
     manager_discount = .99
     manager_learning_rate = 1e-4
     manager_value_loss_weight = .1
-
-    g_eps_start = .10
+    
+    random_goals = True
+    g_eps_start = .1
     g_eps_end = 0.0
-    g_eps_steps = 10000000
+    g_eps_steps = 20000000
     # g_eps = .02 # Probability of random goal
     s_is_obs = False # skips precept and z, used for visualization mainly
     if s_is_obs:
@@ -50,8 +51,8 @@ class Config(object):
     # constrained to match manager_lstm_size because of the way features are stored
     worker_lstm_size = manager_lstm_size
     k = 16 # dimensionality of w
-    alpha_start = .35
-    alpha_end = .35
+    alpha_start = .4
+    alpha_end = .4
     alpha_steps = decay_steps / 20
     worker_discount = .95
     worker_learning_rate = 1e-4

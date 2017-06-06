@@ -148,20 +148,21 @@ class FeudalPolicy(policy.Policy):
             g_hat = linear(hidden_g_hat, self.config.g_dim, 'g_hat',
                 initializer=normalized_columns_initializer(1.0)
             )
+            if self.config.random_goals:
+                g_eps = tf.train.polynomial_decay(
+                    self.config.g_eps_start,
+                    self.global_step,
+                    end_learning_rate=self.config.g_eps_end,
+                    decay_steps=self.config.g_eps_steps,
+                    power=1
+                )
 
-            g_eps = tf.train.polynomial_decay(
-                self.config.g_eps_start,
-                self.global_step,
-                end_learning_rate=self.config.g_eps_end,
-                decay_steps=self.config.g_eps_steps,
-                power=1
-            )
-
-            g_hat = tf.cond(tf.random_uniform(()) < g_eps,
+                g_hat = tf.cond(tf.random_uniform(()) < g_eps,
                                 lambda: tf.random_normal(tf.shape(g_hat)),
                                 lambda: g_hat)
 
-            self.g = tf.nn.l2_normalize(g_hat, dim=1)
+            self.g = g_hat/tf.stop_gradient(tf.norm(g_hat,axis=1,keep_dims=True))
+            #self.g = tf.expand_dims(self.g,[1])
 
             if self.config.verbose:
                 self.g = tf.Print(self.g, [self.g, g_hat],

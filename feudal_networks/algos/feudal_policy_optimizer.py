@@ -235,8 +235,9 @@ class FeudalPolicyOptimizer(object):
             global_w_vars = [v for v in self.network.var_list if 'worker' in v.name]
             local_w_vars = [v for v in pi.var_list if 'worker' in v.name]
             w_grads = tf.gradients(pi.loss, local_w_vars)
-            w_grads, _ = tf.clip_by_global_norm(
-                w_grads, self.config.worker_global_norm_clip)
+            w_grads = [tf.clip_by_value(grad,-1.,1.) for grad in w_grads]
+            #w_grads, _ = tf.clip_by_global_norm(
+            #    w_grads, self.config.worker_global_norm_clip)
             w_grads_and_vars = [(g,v) for (g,v) in zip(w_grads, global_w_vars)]
             w_opt = tf.train.RMSPropOptimizer(self.config.worker_learning_rate)
             w_train_op = w_opt.apply_gradients(w_grads_and_vars)
@@ -245,8 +246,9 @@ class FeudalPolicyOptimizer(object):
             global_m_vars = [v for v in self.network.var_list if 'manager' in v.name]
             local_m_vars = [v for v in pi.var_list if 'manager' in v.name]
             m_grads = tf.gradients(pi.loss, local_m_vars)
-            m_grads, _ = tf.clip_by_global_norm(
-                m_grads, self.config.manager_global_norm_clip)
+            m_grads = [tf.clip_by_value(grad,-1.,1.) for grad in m_grads]
+            #m_grads, _ = tf.clip_by_global_norm(
+            #    m_grads, self.config.manager_global_norm_clip)
             m_grads_and_vars = [(g,v) for (g,v) in zip(m_grads, global_m_vars)]
             m_opt = tf.train.RMSPropOptimizer(self.config.manager_learning_rate)
             self.m_train_op = m_opt.apply_gradients(m_grads_and_vars)
