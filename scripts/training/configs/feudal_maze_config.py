@@ -3,9 +3,9 @@ class Config(object):
     verbose = False
     n_percept_hidden_layer = 4
     n_percept_filters = 32
-    beta_start = .01
-    beta_end = .0001
-    decay_steps = 5000000
+    beta_start = .001
+    beta_end = .001
+    decay_steps = 100000
     summary_steps = 10
     num_local_steps = 400
     testing = False
@@ -36,9 +36,9 @@ class Config(object):
     manager_value_loss_weight = .1
 
     random_goals = True
-    g_eps_start = .1
+    g_eps_start = .01
     g_eps_end = 0.0
-    g_eps_steps = 20000000
+    g_eps_steps = 100000
     # g_eps = .02 # Probability of random goal
     s_is_obs = False # skips precept and z, used for visualization mainly
     if s_is_obs:
@@ -51,8 +51,8 @@ class Config(object):
     # constrained to match manager_lstm_size because of the way features are stored
     worker_lstm_size = manager_lstm_size
     k = 16 # dimensionality of w
-    alpha_start = .4
-    alpha_end = .4
+    alpha_start = .75
+    alpha_end = .75
     alpha_steps = decay_steps / 20
     worker_discount = .95
     worker_learning_rate = 1e-4

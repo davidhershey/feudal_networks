@@ -88,7 +88,7 @@ register(
     entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
     max_episode_steps=200,
     kwargs = {
-        'room_length': 6,
+        'room_length': 3,
         'num_rooms_per_side': 3
     },
     tags = {
@@ -101,7 +101,7 @@ register(
     entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
     max_episode_steps=200,
     kwargs = {
-        'room_length': 6,
+        'room_length': 3,
         'num_rooms_per_side': 5
     },
     tags = {
@@ -114,7 +114,7 @@ register(
     entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
     max_episode_steps=200,
     kwargs = {
-        'room_length': 6,
+        'room_length': 3,
         'num_rooms_per_side': 7
     },
     tags = {
@@ -127,7 +127,7 @@ register(
     entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
     max_episode_steps=200,
     kwargs = {
-        'room_length': 6,
+        'room_length': 3,
         'num_rooms_per_side': 9
     },
     tags = {
@@ -140,7 +140,7 @@ register(
     entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
     max_episode_steps=200,
     kwargs = {
-        'room_length': 6,
+        'room_length': 5,
         'num_rooms_per_side': 9
     },
     tags = {

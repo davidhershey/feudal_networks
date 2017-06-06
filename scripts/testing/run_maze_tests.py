@@ -1,7 +1,7 @@
 import os
 
 
-configs_and_policies = [('lstm','lstm_config'),('feudal','feudal_config')]
+configs_and_policies = [('lstm','lstm_maze_config'),('feudal','feudal_maze_config')]
 mazes = ['VisionMaze3-v0','VisionMaze5-v0','VisionMaze9-v0','VisionMaze25-v0']
 room_mazes = ['RoomMaze3-v0','RoomMaze5-v0','RoomMaze7-v0','RoomMaze9-v0']
 
