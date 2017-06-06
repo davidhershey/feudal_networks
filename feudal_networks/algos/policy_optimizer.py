@@ -106,6 +106,7 @@ class RunnerThread(threading.Thread):
 
             self.queue.put(next(rollout_provider), timeout=600.0)
 
+from collections import deque
 def env_runner(env, policy, num_local_steps, summary_writer, visualise):
     """
     The logic of the thread runner.  In brief, it constantly keeps on running
@@ -116,7 +117,8 @@ def env_runner(env, policy, num_local_steps, summary_writer, visualise):
     last_features = policy.get_initial_features()
     length = 0
     rewards = 0
-
+    reward_list = deque(maxlen=30)
+    outfile = open(summary_writer.get_logdir() + '_rewards.txt','w')
     while True:
         terminal_end = False
         rollout = PartialRollout()
@@ -148,7 +150,11 @@ def env_runner(env, policy, num_local_steps, summary_writer, visualise):
                 if length >= timestep_limit or not env.metadata.get('semantics.autoreset'):
                     last_state = env.reset()
                 last_features = policy.get_initial_features()
-                print("Episode finished. Sum of rewards: %f. Length: %d" % (rewards, length))
+                reward_list.append(rewards)
+                mean_reward = np.mean(list(reward_list))
+                print("Episode finished. Sum of rewards: %f. Length: %d.  Mean Reward: %f" % (rewards, length,mean_reward))
+                outfile.write('{}\t{}\n'.format(policy.global_step.eval(),mean_reward))
+                # print("Episode finished. Sum of rewards: %f. Length: %d" % (rewards, length))
                 length = 0
                 rewards = 0
                 break
@@ -172,7 +178,7 @@ class PolicyOptimizer(object):
                     initializer=tf.constant_initializer(0, dtype=tf.int32),
                     trainable=False)
                 self.network = LSTMPolicy(
-                    env.observation_space.shape, 
+                    env.observation_space.shape,
                     env.action_space.n,
                     self.global_step,
                     config
@@ -181,12 +187,12 @@ class PolicyOptimizer(object):
         with tf.device(worker_device):
             with tf.variable_scope("local"):
                 self.local_network = pi = LSTMPolicy(
-                    env.observation_space.shape, 
+                    env.observation_space.shape,
                     env.action_space.n,
                     self.global_step,
                     config
                 )
-                
+
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts
@@ -270,7 +276,9 @@ class PolicyOptimizer(object):
         fetched = sess.run(fetches, feed_dict=feed_dict)
 
         if should_compute_summary:
-            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]), 
+            self.summary_writer.add_summary(tf.Summary.FromString(fetched[0]),
                 fetched[-1])
             self.summary_writer.flush()
         self.local_steps += 1
+
+        return np.mean(batch.r)

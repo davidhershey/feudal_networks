@@ -103,7 +103,7 @@ def run(args, server):
                              save_model_secs=30,
                              save_summaries_secs=30)
 
-    num_global_steps = 100000000
+    num_global_steps = args.steps
 
     logger.info(
         "Starting session. If this hangs, we're mostly likely waiting to connect to the parameter server. " +
@@ -121,13 +121,11 @@ def run(args, server):
     sv.stop()
     logger.info('reached %s steps. worker stopped.', global_step)
 
-def cluster_spec(num_workers, num_ps):
+def cluster_spec(num_workers, num_ps,port):
     """
 More tensorflow setup for data parallelism
 """
     cluster = {}
-    port = 12222
-
     all_ps = []
     host = '127.0.0.1'
     for _ in range(num_ps):
@@ -155,6 +153,8 @@ Setting up Tensorflow for data parallel work
     parser.add_argument('--log-dir', default="/tmp/pong", help='Log directory path')
     parser.add_argument('--env-id', default="PongDeterministic-v4", help='Environment id')
     parser.add_argument('--policy', type=str, default='lstm', help="lstm or feudal policy")
+    parser.add_argument('--port', type=int, default=12222, help="base port")
+    parser.add_argument('--steps', type=int, default=100000000, help="number of steps to run")
     parser.add_argument('-c', '--config', type=str, default='',
                     help="config filename, without \'.py\' extension. The default behavior is to match the config file to the choosen policy")
 
@@ -168,7 +168,8 @@ Setting up Tensorflow for data parallel work
                         help="Visualise the gym environment by running env.render() between each timestep")
 
     args = parser.parse_args()
-    spec = cluster_spec(args.num_workers, 1)
+    spec = cluster_spec(args.num_workers, 1,args.port)
+
     cluster = tf.train.ClusterSpec(spec).as_cluster_def()
 
     def shutdown(signal, frame):

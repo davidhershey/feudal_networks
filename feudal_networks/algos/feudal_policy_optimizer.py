@@ -135,6 +135,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
     length = 0
     rewards = 0
     reward_list = deque(maxlen=30)
+    outfile = open(summary_writer.get_logdir() + '_rewards.txt','w')
     while True:
         terminal_end = False
         rollout = PartialRollout()
@@ -174,6 +175,7 @@ def env_runner(env, policy, num_local_steps, summary_writer,visualise):
                 reward_list.append(rewards)
                 mean_reward = np.mean(list(reward_list))
                 print("Episode finished. Sum of rewards: %f. Length: %d.  Mean Reward: %f" % (rewards, length,mean_reward))
+                outfile.write('{}\t{}\n'.format(policy.global_step.eval(),mean_reward))
                 # sleep(.2)
                 length = 0
                 rewards = 0
@@ -358,3 +360,5 @@ class FeudalPolicyOptimizer(object):
                 fetched[-1])
             self.summary_writer.flush()
         self.local_steps += 1
+
+        return np.mean(batch.manager_returns)

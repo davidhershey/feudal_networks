@@ -19,8 +19,13 @@ parser.add_argument('-m', '--mode', type=str, default='tmux',
                     help="tmux: run workers in a tmux session. nohup: run workers with nohup. child: run workers as child processes")
 parser.add_argument('-p', '--policy', type=str, default='lstm',
                     help="lstm or feudal policy")
+parser.add_argument('-s', '--steps', type=int, default=100000000,
+                    help="number of training steps to execute")
 parser.add_argument('-c', '--config', type=str, default='',
                     help="config filename, without \'.py\' extension. The default behavior is to match the config file to the choosen policy")
+
+parser.add_argument('-d', '--ports', type=int, default=12345,
+                    help="starting port for processes")
 
 # Add visualise tag
 parser.add_argument('--visualise', action='store_true',
@@ -38,15 +43,17 @@ def new_cmd(session, name, cmd, mode, logdir, shell):
         return name, "nohup {} -c {} >{}/{}.{}.out 2>&1 & echo kill $! >>{}/kill.sh".format(shell, shlex_quote(cmd), logdir, session, name, logdir)
 
 
-def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash', 
-        policy='lstm', config='lstm_config', mode='tmux', visualise=False):
+def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash',
+        policy='lstm', config='lstm_config', mode='tmux', visualise=False,ports=12345,steps=100000000):
     # for launching the TF workers and for launching tensorboard
     base_cmd = [
         'CUDA_VISIBLE_DEVICES=',
         sys.executable, 'worker.py',
         '--log-dir', logdir,
         '--env-id', env_id,
-        '--num-workers', str(num_workers)]
+        '--num-workers', str(num_workers),
+        '--port',str(ports+1),
+        '--steps',str(steps)]
 
     if visualise:
         base_cmd += ['--visualise']
@@ -61,15 +68,15 @@ def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash',
     for i in range(num_workers):
         cmds_map += [new_cmd(session,
             "w-%d" % i, base_cmd + [
-                "--job-name", "worker", 
-                "--task", str(i), 
-                "--remotes", remotes[i], 
+                "--job-name", "worker",
+                "--task", str(i),
+                "--remotes", remotes[i],
                 "--policy", policy,
                 "--config", config
-            ], 
+            ],
             mode, logdir, shell)]
 
-    cmds_map += [new_cmd(session, "tb", ["tensorboard", "--logdir", logdir, "--port", "12345"], mode, logdir, shell)]
+    cmds_map += [new_cmd(session, "tb", ["tensorboard", "--logdir", logdir, "--port", "{}".format(ports)], mode, logdir, shell)]
     if mode == 'tmux':
         cmds_map += [new_cmd(session, "htop", ["htop"], mode, logdir, shell)]
 
@@ -93,7 +100,7 @@ def create_commands(session, num_workers, remotes, env_id, logdir, shell='bash',
     if mode == 'tmux':
         cmds += [
         "kill $( lsof -i:12345 -t ) > /dev/null 2>&1",  # kill any process using tensorboard's port
-        "kill $( lsof -i:12222-{} -t ) > /dev/null 2>&1".format(num_workers+12222), # kill any processes using ps / worker ports
+        "kill $( lsof -i:{}-{} -t ) > /dev/null 2>&1".format(ports+1,num_workers+ports+1), # kill any processes using ps / worker ports
         "tmux kill-session -t {}".format(session),
         "tmux new-session -s {} -n {} -d {}".format(session, windows[0], shell)
         ]
@@ -110,12 +117,14 @@ def run():
     args = parser.parse_args()
     if args.config == "":
         args.config = '{}_config'.format(args.policy)
-    cmds, notes = create_commands("a3c", args.num_workers, args.remotes, 
-        args.env_id, args.log_dir, 
-        policy=args.policy, 
+    cmds, notes = create_commands("a3c", args.num_workers, args.remotes,
+        args.env_id, args.log_dir,
+        policy=args.policy,
         config=args.config,
-        mode=args.mode, 
-        visualise=args.visualise
+        mode=args.mode,
+        visualise=args.visualise,
+        ports=args.ports,
+        steps=args.steps
     )
 
     if args.dry_run:
