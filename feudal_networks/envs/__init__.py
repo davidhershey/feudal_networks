@@ -161,3 +161,17 @@ register(
         'feudal': True
     }
 )
+
+register(
+    id='RandomGoalRoomMaze-v0',
+    entry_point='feudal_networks.envs.vision_maze:VisionMazeEnv',
+    max_episode_steps=300,
+    kwargs = {
+        'room_length': 3,
+        'num_rooms_per_side': 5,
+        'random_goal': True
+    },
+    tags = {
+        'feudal': True
+    }
+)

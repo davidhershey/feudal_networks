@@ -121,7 +121,8 @@ def DilatedLSTM(s_t, size,state_in,idx_in,chunks=8):
         # old_state = [tf.expand_dims(c[i],[0]),tf.expand_dims(h[i],[0])]
         old_state = rnn.LSTMStateTuple(tf.expand_dims(c[i],[0]),tf.expand_dims(h[i],[0]))
         out, state_out = lstm(current_input, old_state)
-
+        c = tf.stop_gradient(c)
+        h = tf.stop_gradient(h)
         co = state_out[0] - c[i]
         ho = state_out[1] - h[i]
 
