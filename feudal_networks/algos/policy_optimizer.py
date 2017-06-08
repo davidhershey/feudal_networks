@@ -10,6 +10,7 @@ import threading
 import six.moves.queue as queue
 
 from feudal_networks.policies.lstm_policy import LSTMPolicy
+from feudal_networks.policies.dlstm_policy import DLSTMPolicy
 from feudal_networks.policies.feudal_policy import FeudalPolicy
 
 def discount(x, gamma):
@@ -177,21 +178,37 @@ class PolicyOptimizer(object):
                 self.global_step = tf.get_variable("global_step", [], tf.int32,
                     initializer=tf.constant_initializer(0, dtype=tf.int32),
                     trainable=False)
-                self.network = LSTMPolicy(
-                    env.observation_space.shape,
-                    env.action_space.n,
-                    self.global_step,
-                    config
-                )
+                if policy == 'dlstm':
+                    self.network = DLSTMPolicy(
+                        env.observation_space.shape,
+                        env.action_space.n,
+                        self.global_step,
+                        config
+                    )
+                else:
+                    self.network = LSTMPolicy(
+                        env.observation_space.shape,
+                        env.action_space.n,
+                        self.global_step,
+                        config
+                    )
 
         with tf.device(worker_device):
             with tf.variable_scope("local"):
-                self.local_network = pi = LSTMPolicy(
-                    env.observation_space.shape,
-                    env.action_space.n,
-                    self.global_step,
-                    config
-                )
+                if policy == 'dlstm':
+                    self.local_network = pi = DLSTMPolicy(
+                        env.observation_space.shape,
+                        env.action_space.n,
+                        self.global_step,
+                        config
+                    )
+                else:
+                    self.local_network = pi = LSTMPolicy(
+                        env.observation_space.shape,
+                        env.action_space.n,
+                        self.global_step,
+                        config
+                    )
 
                 pi.global_step = self.global_step
             self.policy = pi

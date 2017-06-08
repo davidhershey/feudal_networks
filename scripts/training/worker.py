@@ -46,7 +46,7 @@ def build_config(args):
     return config
 
 def build_optimizer(env, config, args):
-    if args.policy == 'lstm':
+    if args.policy == 'lstm' or args.policy == 'dlstm':
         trainer = PolicyOptimizer(
             env, args.task, args.policy, config, args.visualise,)
     elif args.policy == 'feudal':
