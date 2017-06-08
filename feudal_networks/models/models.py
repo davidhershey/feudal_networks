@@ -123,27 +123,18 @@ def DilatedLSTM(s_t, size,state_in,idx_in,chunks=8):
         out, state_out = lstm(current_input, old_state)
         c = tf.stop_gradient(c)
         h = tf.stop_gradient(h)
-        co = state_out[0] - c[i]
-        ho = state_out[1] - h[i]
-
-        cob = tf.zeros((chunks,size))
-        hob = tf.zeros((chunks,size))
+        co = state_out[0]
+        ho = state_out[1]
 
         col = tf.expand_dims(tf.one_hot(i,chunks),[1])
-        mask = col
+        new_mask = col
         for _ in range(size-1):
-            mask = tf.concat([mask,col],axis=1)
-        cob = cob + mask * co
-        hob = hob + mask * ho
+            new_mask = tf.concat([new_mask,col],axis=1)
+        old_mask = 1 - new_mask
 
-        # cob = tf.concat([tf.zeros((i,size)),co,tf.zeros((chunks-i-1,size))],axis=0)
-        # hob = tf.concat([tf.zeros((i,size)),ho,tf.zeros((chunks-i-1,size))],axis=0)
+        c_out = c * old_mask + co * new_mask
+        h_out = h * old_mask + ho * new_mask
 
-        tf.reshape(cob,(chunks,size))
-        tf.reshape(hob,(chunks,size))
-        # cob = tf.Print(cob,[tf.shape(cob)])
-        c_out = c + cob
-        h_out = h + hob
         state_out = [c_out,h_out]
         i += tf.constant(1)
         new_i = tf.mod(i, chunks)
