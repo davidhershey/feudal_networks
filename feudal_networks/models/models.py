@@ -126,9 +126,21 @@ def DilatedLSTM(s_t, size,state_in,idx_in,chunks=8):
         co = state_out[0] - c[i]
         ho = state_out[1] - h[i]
 
-        cob = tf.concat([tf.zeros((i,size)),co,tf.zeros((chunks-i-1,size))],axis=0)
-        hob = tf.concat([tf.zeros((i,size)),ho,tf.zeros((chunks-i-1,size))],axis=0)
+        cob = tf.zeros((chunks,size))
+        hob = tf.zeros((chunks,size))
 
+        col = tf.expand_dims(tf.one_hot(i,chunks),[1])
+        mask = col
+        for _ in range(size-1):
+            mask = tf.concat([mask,col],axis=1)
+        cob = cob + mask * co
+        hob = hob + mask * ho
+
+        # cob = tf.concat([tf.zeros((i,size)),co,tf.zeros((chunks-i-1,size))],axis=0)
+        # hob = tf.concat([tf.zeros((i,size)),ho,tf.zeros((chunks-i-1,size))],axis=0)
+
+        tf.reshape(cob,(chunks,size))
+        tf.reshape(hob,(chunks,size))
         # cob = tf.Print(cob,[tf.shape(cob)])
         c_out = c + cob
         h_out = h + hob
