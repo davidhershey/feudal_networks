@@ -213,7 +213,7 @@ class PolicyOptimizer(object):
                 pi.global_step = self.global_step
             self.policy = pi
             # build runner thread for collecting rollouts
-            self.runner = RunnerThread(env, self.policy, 20, visualise)
+            self.runner = RunnerThread(env, self.policy, self.config.num_local_steps, visualise)
 
             # formulate gradients
             grads = tf.gradients(pi.loss, pi.var_list)

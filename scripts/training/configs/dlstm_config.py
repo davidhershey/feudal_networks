@@ -1,5 +1,6 @@
 class Config(object):
     size = 256
+    num_local_steps = 200
     n_percept_hidden_layer = 4
     n_percept_filters = 32
     beta_start = .001
