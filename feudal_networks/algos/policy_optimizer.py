@@ -229,7 +229,7 @@ class PolicyOptimizer(object):
             inc_step = self.global_step.assign_add(tf.shape(pi.obs)[0])
 
             # build train op
-            opt = tf.train.AdamOptimizer(1e-4)
+            opt = tf.train.AdamOptimizer(config.lr)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
