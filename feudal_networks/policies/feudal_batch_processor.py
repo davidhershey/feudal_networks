@@ -46,8 +46,16 @@ class FeudalBatch(object):
     def get_batch(self):
         batch_obs = np.asarray(self.obs)
         batch_idx = np.asarray(self.idx)
-        batch_g_in = np.squeeze(np.asarray(self.g))
-        batch_g_prev = np.squeeze(np.asarray(self.g_prev))
+        batch_g_in = np.asarray(self.g)
+        if len(batch_g_in.shape) > 2:
+	    batch_g_in = np.squeeze(batch_g_in)
+        if len(batch_g_in.shape) < 2:
+            batch_g_in = np.expand_dims(batch_g_in,0)
+        batch_g_prev = np.asarray(self.g_prev)
+        if len(batch_g_prev.shape) > 3:
+            batch_g_prev = np.squeeze(batch_g_prev)
+        if len(batch_g_prev.shape) < 3:
+            batch_g_prev = np.expand_dims(batch_g_prev,0)
         sums = []
         for i in range(len(batch_g_prev)):
             # print batch_g_prev[i].shape
