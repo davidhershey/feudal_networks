@@ -7,3 +7,5 @@ class Config(object):
     decay_steps = 100000
     summary_steps = 10
     gamma = .99
+    num_local_steps = 20
+    lr = .0001
