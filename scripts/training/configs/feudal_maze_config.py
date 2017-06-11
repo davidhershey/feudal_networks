@@ -7,7 +7,7 @@ class Config(object):
     beta_end = .001
     decay_steps = 100000
     summary_steps = 10
-    num_local_steps = 400
+    num_local_steps = 80
     testing = False
     l2_reg = 0.0
     dropout_keep_prob = 1.0
@@ -29,11 +29,11 @@ class Config(object):
     s_dim = 256
     manager_lstm_size = 256
     g_dim = 256
-    c = 10 # manager timesteps
+    c = 4 # manager timesteps
     manager_global_norm_clip = 40
     manager_discount = .99
     manager_learning_rate = 1e-4
-    manager_value_loss_weight = .1
+    manager_value_loss_weight = 1
 
     random_goals = True
     g_eps_start = .01
