@@ -9,4 +9,4 @@ class Config(object):
     summary_steps = 10
     gamma = .99
     chunks = 10
-    lr = 1e-3
+    lr = 1e-4

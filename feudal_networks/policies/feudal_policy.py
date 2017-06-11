@@ -89,6 +89,8 @@ class FeudalPolicy(policy.Policy):
     def _build_manager(self):
         with tf.variable_scope('manager'):
             # Calculate manager internal state
+            self.manager_vf = self._build_value(self.obs)
+
             if self.config.s_is_obs:
                 self.s = policy_utils.flatten(self.obs)
             else:
@@ -168,7 +170,7 @@ class FeudalPolicy(policy.Policy):
                 self.g = tf.Print(self.g, [self.g, g_hat],
                     message='\nmanager g and g_hat: ', summarize=5)
 
-            self.manager_vf = self._build_value(lstm_output)
+            # self.manager_vf = self._build_value(lstm_output)
 
             # add manager c, h to state in and out
             self.state_in = [
@@ -183,6 +185,7 @@ class FeudalPolicy(policy.Policy):
     def _build_worker(self):
         with tf.variable_scope('worker'):
             num_acts = self.act_space
+            self.worker_vf = self._build_value(self.obs)
 
             # Calculate w
             cut_g = tf.expand_dims(self.g_in,[1])
@@ -217,7 +220,7 @@ class FeudalPolicy(policy.Policy):
                 worker_hint = tf.stop_gradient(tf.contrib.layers.batch_norm(w))
                 lstm_output = tf.concat([lstm_output, worker_hint], axis=1)
 
-            self.worker_vf = self._build_value(lstm_output)
+            # self.worker_vf = self._build_value(lstm_output)
 
             flat_logits_hidden = tf.layers.dense(
                 inputs=lstm_output,
@@ -286,10 +289,16 @@ class FeudalPolicy(policy.Policy):
             ])
 
 
-    def _build_value(self,input):
+    def _build_value(self,x):
         with tf.variable_scope('VF'):
+            for i in range(self.config.n_percept_hidden_layer):
+                x = tf.nn.elu(conv2d(x, self.config.n_percept_filters,
+                    "l_{}".format(i + 1), [3, 3], [2, 2]))
+                if self.config.use_batch_norm:
+                    x = tf.contrib.layers.batch_norm(x)
+            flattened_filters = policy_utils.flatten(x)
             hidden = tf.layers.dense(
-                        inputs=input,
+                        inputs=flattened_filters,
                         units=self.config.vf_hidden_size,
                         activation=tf.nn.elu,
                         name='hidden'
@@ -298,6 +307,7 @@ class FeudalPolicy(policy.Policy):
                 initializer=normalized_columns_initializer(1.0)
             )
             return vf
+
 
     def _build_loss(self):
 
